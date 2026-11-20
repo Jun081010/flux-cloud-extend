@@ -93,6 +93,15 @@ const en: Record<MessageKey, string> = {
   "diagnostics.exporting": "Exporting…",
   "diagnostics.exportStarted": "Diagnostic log download started",
   "diagnostics.exportFailed": "Could not export diagnostic logs. Please try again from All Settings.",
+  "diagnostics.nmh.notAllowedTitle": "Extension ID is not allowlisted",
+  "diagnostics.nmh.notAllowedBody":
+    "The desktop app refused this extension: {id} is not in the allowlist. Run the one-click installer again to re-register it, or add {id} to allowed_origins in %LOCALAPPDATA%\\FluxDownCloudExtension\\nmh\\com.fluxdown.cloud.nmh.json and restart the browser.",
+  "diagnostics.nmh.notRegisteredTitle": "Download bridge not found",
+  "diagnostics.nmh.notRegisteredBody":
+    "The browser cannot find com.fluxdown.cloud.nmh. Run the one-click installer first, and make sure FluxDown has been started at least once (the relay ships with the desktop app).",
+  "diagnostics.nmh.manifestInvalidTitle": "Download bridge manifest is invalid",
+  "diagnostics.nmh.manifestInvalidBody":
+    "The com.fluxdown.cloud.nmh manifest cannot be parsed (it may have been edited manually). Running the one-click installer again rewrites it.",
 
   // Task send notification toggles
   "options.general.notifyLocalTitle": "Local Task Notifications",
@@ -340,6 +349,10 @@ const en: Record<MessageKey, string> = {
   "sidepanel.diag.status": "Status",
   "sidepanel.diag.protocol": "Protocol version",
   "sidepanel.diag.plugins": "Resolver plugins",
+  "sidepanel.diag.extensionId": "Extension ID",
+  "sidepanel.diag.copyId": "Copy",
+  "sidepanel.diag.copyIdDone": "Extension ID copied",
+  "sidepanel.diag.copyIdFailed": "Copy failed; select the ID manually",
   "sidepanel.diag.pluginCount": "{total} installed, {enabled} active",
   "sidepanel.diag.ruleSync": "Rule sync",
   "sidepanel.diag.syncEnabled": "Rule sync",

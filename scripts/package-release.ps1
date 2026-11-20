@@ -39,22 +39,38 @@ if ([string]::IsNullOrWhiteSpace($DesktopDir)) {
     $DesktopDir = $desktop
 }
 
-if ([string]::IsNullOrWhiteSpace($Version)) {
-    $versionFile = Join-Path $repoRoot '.test-artifacts\release-version.txt'
-    if (Test-Path -LiteralPath $versionFile -PathType Leaf) {
-        $Version = (Get-Content -LiteralPath $versionFile -Raw).Trim()
-    }
-}
-if ([string]::IsNullOrWhiteSpace($Version)) {
-    $Version = (Get-Date).ToString('yyyyMMdd')
-}
-
 $edgeBuild = Join-Path $repoRoot 'app\.output\edge-mv3'
 $chromeBuild = Join-Path $repoRoot 'app\.output\chrome-mv3'
 foreach ($build in @($edgeBuild, $chromeBuild)) {
     if (-not (Test-Path -LiteralPath $build -PathType Container)) {
         throw "build output missing: $build (run 'bun run build' and 'bun run build:edge' first)"
     }
+}
+
+# The manifest is the single source of truth for what is inside the zip.
+# A stale name here is how a 0.1.45 archive ends up labelled 0.1.46.
+$manifestVersions = @{}
+foreach ($build in @($edgeBuild, $chromeBuild)) {
+    $manifestPath = Join-Path $build 'manifest.json'
+    try {
+        $manifestVersions[$build] = (Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json).version
+    }
+    catch {
+        throw "cannot read version from $manifestPath : $($_.Exception.Message)"
+    }
+}
+$buildVersion = $manifestVersions[$edgeBuild]
+if ([string]::IsNullOrWhiteSpace($buildVersion)) {
+    throw "edge build has no version in $edgeBuild\manifest.json"
+}
+if ($manifestVersions[$chromeBuild] -ne $buildVersion) {
+    throw ("edge/chrome build version mismatch: edge={0} chrome={1}" -f $buildVersion, $manifestVersions[$chromeBuild])
+}
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $Version = $buildVersion
+}
+elseif ($Version -notlike "*$buildVersion*") {
+    throw ("-Version '{0}' does not match built manifest version '{1}'. Rebuild or fix -Version." -f $Version, $buildVersion)
 }
 
 # Guard against packaging a stale build: the background bundle must contain the

@@ -32,6 +32,12 @@ export function installConnectionDiagnostics() {
       return { ok: true };
     }
 
+    // 侧边栏要显示「最近一次连不上的原因」，这里只读快照，不做探活：
+    // 探活会顺带唤醒桌面端，诊断页每次刷新都调用它并不合适。
+    if (message.type === "diagnostics-snapshot") {
+      return { ok: true, events: await store.snapshot() };
+    }
+
     // Pure liveness check: never warm up/start the desktop app or submit a task.
     const localReachable = await nmhCheckFluxDownAvailableWithRetry();
     const [settings, platform, events, errors] = await Promise.all([

@@ -87,6 +87,15 @@ const zhTW = {
   "diagnostics.exporting": "正在匯出…",
   "diagnostics.exportStarted": "診斷記錄已開始下載",
   "diagnostics.exportFailed": "匯出診斷記錄失敗，請在「全部設定」中再試一次。",
+  "diagnostics.nmh.notAllowedTitle": "擴充功能 ID 不在白名單",
+  "diagnostics.nmh.notAllowedBody":
+    "桌面端拒絕了本擴充功能的連線：白名單裡沒有 {id}。重新執行「一鍵安裝.cmd」會重新註冊；也可以把 {id} 寫進 %LOCALAPPDATA%\\FluxDownCloudExtension\\nmh\\com.fluxdown.cloud.nmh.json 的 allowed_origins，然後重新啟動瀏覽器。",
+  "diagnostics.nmh.notRegisteredTitle": "找不到下載橋",
+  "diagnostics.nmh.notRegisteredBody":
+    "瀏覽器找不到 com.fluxdown.cloud.nmh。請先執行「一鍵安裝.cmd」，並確認 FluxDown 桌面端至少啟動過一次（中繼程式隨桌面端安裝）。",
+  "diagnostics.nmh.manifestInvalidTitle": "下載橋清單無效",
+  "diagnostics.nmh.manifestInvalidBody":
+    "com.fluxdown.cloud.nmh 的清單無法解析（可能被手動改壞）。重新執行「一鍵安裝.cmd」會重寫清單。",
 
   // 任务发送通知开关
   "options.general.notifyLocalTitle": "本機任務通知",
@@ -329,6 +338,10 @@ const zhTW = {
   "sidepanel.diag.status": "狀態",
   "sidepanel.diag.protocol": "協定版本",
   "sidepanel.diag.plugins": "解析外掛",
+  "sidepanel.diag.extensionId": "擴充功能 ID",
+  "sidepanel.diag.copyId": "複製",
+  "sidepanel.diag.copyIdDone": "擴充功能 ID 已複製",
+  "sidepanel.diag.copyIdFailed": "複製失敗，請手動選取上面的 ID",
   "sidepanel.diag.pluginCount": "已安裝 {total} 個，生效 {enabled} 個",
   "sidepanel.diag.ruleSync": "規則同步",
   "sidepanel.diag.syncEnabled": "規則同步",

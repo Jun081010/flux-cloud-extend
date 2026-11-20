@@ -173,7 +173,7 @@ shim 至少提供：
 以下为验收清单；已执行项记录实际结果，未执行项单独列出：
 
 1. 已通过：`bun run test:cloud`，补丁审计副本 `linkswift.user.js` sha256=`86d61a4692e975097e17b8cb9911faeb635940506ffa453dd6dec484b304caab`、840263 bytes；注入产物 `linkswift.bundle.js` sha256=`c9b20466486d3e232a30222b4940ece6c1f8d9853923d52edebb3fff20bb3fe1`、984404 bytes。
-2. 已通过：`bun run test:all`（67 个 `bun:test` 文件 829 通过 / 1 跳过，3 个 `node:test` 文件 37 通过）。
+2. 已通过：`bun run test:all`（68 个 `bun:test` 文件 836 通过 / 1 跳过，3 个 `node:test` 文件 37 通过）。
 3. 已通过：`bun run typecheck`。
 4. 已通过：`bun run build:edge`；`bun run build`。
 5. 已核对：Edge/Chrome 的 `manifest.json` 中 WAR matches 为云盘 patterns，cloud content script 为 `all_frames: false`、`run_at: document_start`，四个 `/cloud/` 资源均在产物中。
@@ -184,6 +184,7 @@ shim 至少提供：
 10. 已通过：`bun test entrypoints/panel.content/drop-target.test.ts rules/x-rules.test.ts`（内核落点选择 + X 规则 13/13）；`bun run typecheck`；`bun run build:edge`。
 11. 已通过：隔离 Edge（CDP 9223）+ 本地测试页内核球冒烟：悬浮球显示、Shift 拖出内核、失败停留并提示、轻点收回、拖放发起下载（NMH 未连时保留内核）。
 12. 未验证：X / Twitter 真实页面（当前网络不可达）；DRM / 登录 / 会员内容不承诺可下载。
+13. 已通过：连接诊断把浏览器原文归类为「扩展 ID 不在白名单 / 没找到下载桥 / 清单损坏」（`utils/nmh-diagnostics-tips.test.ts`）；侧边栏「诊断」页显示可复制的扩展 ID 与对应处理提示；`一键安装.cmd` 写 `logs\install-<时间>.log`（含每步结果与 `SUMMARY`），并在写完清单后回读校验 `allowed_origins`。
 
 资源嗅探与内核球状态：B 站公开页 `BV1GJ411x7h7` 已真实验证（probe live，DASH 候选可下载）；X 规则仅限 twimg 域名并通过单测，未做真实页面验证。悬浮球可见性只依赖 pageDot（含全局与站点配置），与嗅探开关解耦。
 

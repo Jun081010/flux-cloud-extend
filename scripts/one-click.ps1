@@ -30,7 +30,10 @@ param(
     [string]$Browser = 'Auto',
     [switch]$NoLaunch,
     [switch]$NoFfmpeg,
-    [switch]$NoRestartFluxDown
+    [switch]$NoRestartFluxDown,
+    # 安装日志位置；省略时写入 %LOCALAPPDATA%\FluxDownCloudExtension\logs。
+    # 日志包含每一步的结果与扩展 ID，出问题时可整份发给分享者。
+    [string]$LogPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -48,30 +51,92 @@ $script:step = 0
 function Write-Head([string]$Text) {
     Write-Host ""
     Write-Host $Text -ForegroundColor Cyan
+    Write-Log 'HEAD' $Text
 }
 
 function Write-Step([string]$Text) {
     $script:step++
     Write-Host ("[{0}] {1}" -f $script:step, $Text) -ForegroundColor White
+    Write-Log 'STEP' $Text
 }
 
 function Write-Ok([string]$Text) {
     Write-Host ("    OK  " + $Text) -ForegroundColor Green
+    Write-Log 'OK  ' $Text
 }
 
 function Write-Note([string]$Text) {
     Write-Host ("    ..  " + $Text) -ForegroundColor DarkGray
+    Write-Log 'NOTE' $Text
 }
 
 function Write-WarnMsg([string]$Text) {
     Write-Host ("    !!  " + $Text) -ForegroundColor Yellow
+    Write-Log 'WARN' $Text
 }
 
 function Fail([string]$Text) {
     Write-Host ""
     Write-Host ("[失败] " + $Text) -ForegroundColor Red
-    Write-Host "请把上面的报错截图发给分享者。" -ForegroundColor Red
+    Write-Log 'FAIL' $Text
+    if ($script:logFile) {
+        Write-Host ("安装日志：{0}" -f $script:logFile) -ForegroundColor Red
+        Write-Host "请把这份日志（或上面的报错截图）发给分享者。" -ForegroundColor Red
+    }
+    else {
+        Write-Host "请把上面的报错截图发给分享者。" -ForegroundColor Red
+    }
     exit 1
+}
+
+# ---------------------------------------------------------------- logging
+# 安装失败时最难查的是「脚本到底走到哪一步」。所有输出同时落一份带时间戳的
+# 文本日志，并在结尾追加可机读的 SUMMARY 行。
+
+$script:logFile = $null
+
+function Write-Log([string]$Level, [string]$Text) {
+    if (-not $script:logFile) { return }
+    try {
+        $line = "{0} [{1}] {2}`r`n" -f (Get-Date).ToString('HH:mm:ss.fff'), $Level, $Text
+        [System.IO.File]::AppendAllText($script:logFile, $line, (New-Object System.Text.UTF8Encoding($false)))
+    }
+    catch {
+        # 日志写不进去不能影响安装本身。
+    }
+}
+
+function Initialize-Log([string]$Path) {
+    try {
+        if ([string]::IsNullOrWhiteSpace($Path)) {
+            $Path = Join-Path (Join-Path $installRoot 'logs') ('install-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
+        }
+        $directory = Split-Path -Parent $Path
+        if ($directory -and -not (Test-Path -LiteralPath $directory -PathType Container)) {
+            New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        }
+        $script:logFile = [System.IO.Path]::GetFullPath($Path)
+        Write-Log 'INFO' '=== FluxDown Cloud one-click installer ==='
+        Write-Log 'INFO' ("time        : {0}" -f (Get-Date).ToString('yyyy-MM-dd HH:mm:ss zzz'))
+        Write-Log 'INFO' ("powershell  : {0}" -f $PSVersionTable.PSVersion)
+        Write-Log 'INFO' ("args        : Browser={0} NoLaunch={1} NoFfmpeg={2} NoRestartFluxDown={3}" -f $Browser, [bool]$NoLaunch, [bool]$NoFfmpeg, [bool]$NoRestartFluxDown)
+        Write-Log 'INFO' ("package root: {0}" -f $root)
+        Write-Log 'INFO' ("install root: {0}" -f $installRoot)
+        $manifest = Join-Path $root 'extension\edge-mv3\manifest.json'
+        if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+            $manifest = Join-Path $root 'extension\chrome-mv3\manifest.json'
+        }
+        if (Test-Path -LiteralPath $manifest -PathType Leaf) {
+            try {
+                $version = (Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json).version
+                Write-Log 'INFO' ("package ver : {0}" -f $version)
+            }
+            catch { }
+        }
+    }
+    catch {
+        $script:logFile = $null
+    }
 }
 
 function Get-FullPath([string]$Path) {
@@ -208,8 +273,49 @@ function Register-Bridge([string]$Name, [string]$ExtensionId) {
     $output = & powershell -NoProfile -ExecutionPolicy Bypass -File $installer `
         -ExtensionId $ExtensionId -Browser $Name 2>&1
     $code = $LASTEXITCODE
-    foreach ($line in $output) { Write-Host ("    " + $line) -ForegroundColor DarkGray }
+    foreach ($line in $output) {
+        Write-Host ("    " + $line) -ForegroundColor DarkGray
+        Write-Log 'BRIDGE' ([string]$line)
+    }
+    Write-Log 'BRIDGE' ("install-native-host.ps1 exit code = {0} (browser={1}, id={2})" -f $code, $Name, $ExtensionId)
     return $code
+}
+
+<#
+ * 写完白名单后回读校验：确认 allowed_origins 真的包含本次的扩展 ID。
+ * 之前只信任子进程退出码，出现「注册报成功但文件没改」时无从发现。
+#>
+function Test-BridgeWhitelist([string]$ExtensionId) {
+    $manifest = Join-Path $installRoot 'nmh\com.fluxdown.cloud.nmh.json'
+    $origin = "chrome-extension://$ExtensionId/"
+    if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+        return [pscustomobject]@{
+            Ok     = $false
+            Path   = $manifest
+            Detail = '白名单文件不存在'
+            Origins = ''
+        }
+    }
+    try {
+        $parsed = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    catch {
+        return [pscustomobject]@{
+            Ok     = $false
+            Path   = $manifest
+            Detail = ("白名单文件无法解析：{0}" -f $_.Exception.Message)
+            Origins = ''
+        }
+    }
+    $origins = @($parsed.allowed_origins | Where-Object { $_ })
+    $hit = $origins -contains $origin
+    return [pscustomobject]@{
+        Ok      = $hit
+        Path    = $manifest
+        Origins = ($origins -join ', ')
+        Detail  = if ($hit) { "allowed_origins 含 $origin" }
+                  else { "allowed_origins = [$($origins -join ', ')]，缺少 $origin" }
+    }
 }
 
 function Send-EnvironmentChange {
@@ -466,8 +572,13 @@ function Wait-InstalledExtension([string]$Name, [string]$FolderName, [int]$Secon
 
 # ---------------------------------------------------------------- main flow
 
+Initialize-Log $LogPath
+
 Write-Head "=== FluxDown Cloud 一键安装 / 更新 ==="
 Write-Host ("安装目录：{0}" -f $installRoot) -ForegroundColor DarkGray
+if ($script:logFile) {
+    Write-Host ("安装日志：{0}" -f $script:logFile) -ForegroundColor DarkGray
+}
 
 if (-not (Test-Path -LiteralPath (Join-Path $root 'extension') -PathType Container)) {
     Fail "没有找到 extension 目录。请先完整解压压缩包，再双击 一键安装.cmd。"
@@ -549,11 +660,15 @@ foreach ($name in $wanted) {
     $extensionId = if ($existing) { $existing.Id } else { Get-UnpackedExtensionId $target }
     Write-Note ("扩展 ID：{0}" -f $extensionId)
     $code = Register-Bridge $name $extensionId
-    if ($code -ne 0) {
-        Write-WarnMsg "桥注册失败，稍后可在扩展页刷新 ID 后重新运行本脚本。"
+    $verify = Test-BridgeWhitelist $extensionId
+    if ($code -ne 0 -or -not $verify.Ok) {
+        Write-WarnMsg "桥注册未完成：白名单没有写入本次扩展 ID。"
+        Write-Note ("白名单文件：{0}" -f $verify.Path)
+        Write-Note ("回读结果：{0}" -f $verify.Detail)
     }
     else {
         Write-Ok "Native Messaging 已注册（com.fluxdown.cloud.nmh）"
+        Write-Note ("白名单已回读确认：{0}" -f $verify.Path)
     }
 
     Write-Step "创建桌面快捷方式"
@@ -570,6 +685,9 @@ foreach ($name in $wanted) {
         Shortcut  = $shortcut
         Folder    = $folderName
         Version   = $manifest.version
+        BridgeOk  = [bool]($code -eq 0 -and $verify.Ok)
+        BridgeWhy = $verify.Detail
+        BridgeFile = $verify.Path
     }
 }
 
@@ -629,9 +747,17 @@ if (-not $NoLaunch) {
             Write-WarnMsg ("检测到实际扩展 ID 为 {0}，重新注册桥。" -f $hit.Id)
             [void](Register-Bridge $item.Browser $hit.Id)
             $item.Id = $hit.Id
+            $recheck = Test-BridgeWhitelist $hit.Id
+            $item.BridgeOk = [bool]$recheck.Ok
+            $item.BridgeWhy = $recheck.Detail
+            if ($recheck.Ok) { Write-Ok "白名单已按实际 ID 回读确认" }
+            else { Write-WarnMsg ("白名单回读仍不含 {0}：{1}" -f $hit.Id, $recheck.Detail) }
         }
         elseif ($hit) {
             Write-Ok ("浏览器已加载扩展（ID {0}）" -f $hit.Id)
+            $recheck = Test-BridgeWhitelist $hit.Id
+            $item.BridgeOk = [bool]$recheck.Ok
+            $item.BridgeWhy = $recheck.Detail
         }
         else {
             Write-WarnMsg "浏览器没有在 25 秒内记录扩展；请用桌面快捷方式启动，或手动加载。"
@@ -643,9 +769,41 @@ Write-Head "=== 完成 ==="
 foreach ($item in $results) {
     Write-Host ("{0}：{1}（v{2}）" -f $item.Browser, $item.Target, $item.Version)
     Write-Host ("  扩展 ID：{0}" -f $item.Id) -ForegroundColor DarkGray
+    if ($item.BridgeOk) {
+        Write-Host "  下载桥：OK（白名单已包含该 ID）" -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host ("  下载桥：失败 - {0}" -f $item.BridgeWhy) -ForegroundColor Red
+        Write-Host ("  白名单：{0}" -f $item.BridgeFile) -ForegroundColor Red
+    }
     if ($item.Fresh -and $item.Running) {
         Write-Host ("  首次安装：请先完全退出 {0}，再双击桌面快捷方式「FluxDown Cloud ({0})」启动一次。" -f $item.Browser) -ForegroundColor Yellow
     }
+}
+$bridgeFailures = @($results | Where-Object { -not $_.BridgeOk })
+if ($script:logFile) {
+    try {
+        $summary = [ordered]@{
+            time       = (Get-Date).ToString('o')
+            logFile    = $script:logFile
+            package    = $root
+            results    = @($results | ForEach-Object {
+                [ordered]@{
+                    browser  = $_.Browser
+                    target   = $_.Target
+                    version  = $_.Version
+                    id       = $_.Id
+                    bridgeOk = $_.BridgeOk
+                    bridge   = $_.BridgeWhy
+                }
+            })
+            ffmpeg     = if ($ff) { [ordered]@{ installed = $ff.Installed; pathAdded = $ff.PathAdded; version = $ff.Version; reason = $ff.Reason } } else { $null }
+        }
+        Write-Log 'SUMMARY' ($summary | ConvertTo-Json -Depth 6 -Compress)
+    }
+    catch { }
+    Write-Host ""
+    Write-Host ("安装日志：{0}" -f $script:logFile) -ForegroundColor DarkGray
 }
 Write-Host ""
 Write-Host "最后一步（必须）：" -ForegroundColor Yellow
@@ -655,3 +813,9 @@ Write-Host "    在 FluxDown Cloud 卡片上点一次「重新加载」。" -For
 Write-Host ""
 Write-Host "更新时：解压新包覆盖旧目录，再双击一次 一键安装.cmd 即可。" -ForegroundColor DarkGray
 Write-Host "FFmpeg 首次生效需要重启 FluxDown 桌面端（托盘退出后重新打开）。" -ForegroundColor DarkGray
+
+if ($bridgeFailures.Count -gt 0) {
+    Write-Host ""
+    Write-Host "下载桥注册失败：扩展会显示「未连接」。请把上面的安装日志发给分享者。" -ForegroundColor Red
+    exit 1
+}

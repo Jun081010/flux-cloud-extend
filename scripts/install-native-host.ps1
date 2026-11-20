@@ -476,6 +476,14 @@ if (-not $PSCmdlet.ShouldProcess("HKCU NativeMessagingHosts\$HostName", 'install
 try {
     Write-JsonAtomic -Path $backupFile -Content ($snapshot | ConvertTo-Json -Depth 8)
     Write-JsonAtomic -Path $projectManifest -Content $projectManifestJson
+    # Read the file back before touching the registry: "reported success but the
+    # file was never rewritten" is the failure mode users hit silently, because
+    # the browser then reports a forbidden host and nothing else.
+    $written = [System.IO.File]::ReadAllText($projectManifest, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    $writtenOrigins = @($written.allowed_origins | Where-Object { $_ })
+    if ($writtenOrigins -cnotcontains $customOrigin) {
+        throw ("manifest read-back mismatch: allowed_origins = [{0}]" -f ($writtenOrigins -join ', '))
+    }
 }
 catch {
     Fail "writing files failed: $($_.Exception.Message)"
@@ -510,4 +518,6 @@ Write-Info 'install finished.'
 Write-Info "host name : $HostName"
 Write-Info "backup    : $backupFile"
 Write-Info "manifest  : $projectManifest"
+Write-Info "verified  : allowed_origins contains $customOrigin"
+Write-Info ("mtime     : {0}" -f (Get-Item -LiteralPath $projectManifest).LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))
 Write-Info 'restart the browser, then confirm the popup header shows Connected.'

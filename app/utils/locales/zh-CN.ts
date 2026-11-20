@@ -85,6 +85,15 @@ const zhCN = {
   "diagnostics.exporting": "正在导出…",
   "diagnostics.exportStarted": "诊断日志已开始下载",
   "diagnostics.exportFailed": "导出诊断日志失败，请在「全部设置」中重试。",
+  "diagnostics.nmh.notAllowedTitle": "扩展 ID 不在白名单",
+  "diagnostics.nmh.notAllowedBody":
+    "桌面端拒绝了本扩展的连接：白名单里没有 {id}。重新运行「一键安装.cmd」会重新注册；也可以把 {id} 写进 %LOCALAPPDATA%\\FluxDownCloudExtension\\nmh\\com.fluxdown.cloud.nmh.json 的 allowed_origins，然后重启浏览器。",
+  "diagnostics.nmh.notRegisteredTitle": "没有找到下载桥",
+  "diagnostics.nmh.notRegisteredBody":
+    "浏览器找不到 com.fluxdown.cloud.nmh。请先运行「一键安装.cmd」，并确认 FluxDown 桌面端至少启动过一次（中继程序随桌面端安装）。",
+  "diagnostics.nmh.manifestInvalidTitle": "下载桥清单无效",
+  "diagnostics.nmh.manifestInvalidBody":
+    "com.fluxdown.cloud.nmh 的清单无法解析（可能被手工改坏）。重新运行「一键安装.cmd」会重写清单。",
 
   // 任务发送通知开关
   "options.general.notifyLocalTitle": "本地任务通知",
@@ -327,6 +336,10 @@ const zhCN = {
   "sidepanel.diag.status": "状态",
   "sidepanel.diag.protocol": "协议版本",
   "sidepanel.diag.plugins": "解析插件",
+  "sidepanel.diag.extensionId": "扩展 ID",
+  "sidepanel.diag.copyId": "复制",
+  "sidepanel.diag.copyIdDone": "扩展 ID 已复制",
+  "sidepanel.diag.copyIdFailed": "复制失败，请手动选中上面的 ID",
   "sidepanel.diag.pluginCount": "已安装 {total} 个，生效 {enabled} 个",
   "sidepanel.diag.ruleSync": "规则同步",
   "sidepanel.diag.syncEnabled": "规则同步",

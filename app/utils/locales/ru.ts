@@ -93,6 +93,15 @@ const ru: Record<MessageKey, string> = {
   "diagnostics.exporting": "Экспорт…",
   "diagnostics.exportStarted": "Скачивание журнала диагностики началось",
   "diagnostics.exportFailed": "Не удалось экспортировать журнал диагностики. Повторите через «Все настройки».",
+  "diagnostics.nmh.notAllowedTitle": "ID расширения отсутствует в списке разрешённых",
+  "diagnostics.nmh.notAllowedBody":
+    "Приложение отклонило подключение расширения: {id} нет в списке разрешённых. Запустите установщик ещё раз, чтобы перерегистрировать его, или добавьте {id} в allowed_origins файла %LOCALAPPDATA%\\FluxDownCloudExtension\\nmh\\com.fluxdown.cloud.nmh.json и перезапустите браузер.",
+  "diagnostics.nmh.notRegisteredTitle": "Мост загрузки не найден",
+  "diagnostics.nmh.notRegisteredBody":
+    "Браузер не находит com.fluxdown.cloud.nmh. Сначала запустите установщик и убедитесь, что FluxDown хотя бы раз запускался (ретранслятор ставится вместе с приложением).",
+  "diagnostics.nmh.manifestInvalidTitle": "Некорректный манифест моста загрузки",
+  "diagnostics.nmh.manifestInvalidBody":
+    "Манифест com.fluxdown.cloud.nmh не удаётся разобрать (возможно, его меняли вручную). Повторный запуск установщика перезапишет его.",
 
   // Task send notification toggles
   "options.general.notifyLocalTitle": "Уведомления о локальных задачах",
@@ -340,6 +349,10 @@ const ru: Record<MessageKey, string> = {
   "sidepanel.diag.status": "Статус",
   "sidepanel.diag.protocol": "Версия протокола",
   "sidepanel.diag.plugins": "Плагины-разборщики",
+  "sidepanel.diag.extensionId": "ID расширения",
+  "sidepanel.diag.copyId": "Копировать",
+  "sidepanel.diag.copyIdDone": "ID расширения скопирован",
+  "sidepanel.diag.copyIdFailed": "Не удалось скопировать — выделите ID вручную",
   "sidepanel.diag.pluginCount": "Установлено: {total}, активно: {enabled}",
   "sidepanel.diag.ruleSync": "Синхронизация правил",
   "sidepanel.diag.syncEnabled": "Синхронизация правил",

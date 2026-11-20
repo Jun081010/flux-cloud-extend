@@ -133,6 +133,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-hos
 
 更新扩展后必须在浏览器扩展管理页点一次「重新加载」，否则 Service Worker 可能继续运行旧脚本。
 
+## 诊断与日志
+
+连不上桌面端、下载无声、网盘解析失败时，先取证据再排查：
+
+- **侧边栏「诊断」页**：显示扩展 ID（可一键复制）、连接状态与最近一次断开原因。浏览器给的是英文原文（如 `Access to the specified native messaging host ... is forbidden`），扩展会归类成「扩展 ID 不在白名单 / 没找到下载桥 / 清单损坏」并显示对应处理办法。
+- **连接诊断 JSON**：诊断页底部「导出连接诊断」下载 `fluxdown-connection-diagnostics-<时间>.json`，含扩展 ID、版本、浏览器信息、连接事件与扩展错误日志；URL、路径、凭据在导出前统一脱敏成占位符。
+- **安装日志**：`一键安装.cmd` 每次运行写 `%LOCALAPPDATA%\FluxDownCloudExtension\logs\install-<时间>.log`，记录每一步结果、解析到的扩展 ID、下载桥注册退出码与白名单回读结果，末尾附一行 `SUMMARY` JSON。
+- **白名单回读校验**：安装脚本写完 `nmh\com.fluxdown.cloud.nmh.json` 后会重新读取并确认 `allowed_origins` 含本次扩展 ID；不匹配直接报错退出，避免「显示成功但文件没改」。
+
 ## 资源嗅探与悬浮球内核
 
 - 资源嗅探沿用 FluxDown 官方链路：B 站公开页（`BV1GJ411x7h7`）已真实验证 `probe: "live"`，可拿到 DASH 候选（`.m4s` 视频轨 + `30280` 音频轨）。
@@ -180,7 +189,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-hos
 - 网盘接口与页面结构易变，LinkSwift 补丁可能需要随上游更新。
 - 受支持网盘页面必须使用 HTTPS；HTTP 页面不会注入，也不会被接受为 sender。
 - 分离音轨的合并由桌面端完成：需要 FluxDown 能找到 FFmpeg（PATH 或「设置 → 组件」手动路径）。分享包从 `0.1.44` 起内置 FFmpeg，`0.1.45` 起安装脚本会在无活跃任务时自动重启桌面端使其生效。
-- 已通过补丁测试、`bun run test:all`（67 个 bun 测试文件 829 通过 / 1 跳过，3 个 `node:test` 文件 37 通过）、类型检查、Edge/Chrome 构建；内核小球在隔离 Edge（CDP 9223）+ 本地测试页冒烟验证：悬浮球显示、Shift 拖出内核、失败停留并提示、轻点收回、拖放发起下载（NMH 未连时保留内核）。
+- 已通过补丁测试、`bun run test:all`（68 个 bun 测试文件 836 通过 / 1 跳过，3 个 `node:test` 文件 37 通过）、类型检查、Edge/Chrome 构建；内核小球在隔离 Edge（CDP 9223）+ 本地测试页冒烟验证：悬浮球显示、Shift 拖出内核、失败停留并提示、轻点收回、拖放发起下载（NMH 未连时保留内核）。
 - 百度网盘分享页已用真实链接验证：自动模式会触发、初始化状态不再挡住「下载助手」、未登录时会提示并持续等待，60 秒内不会提前判失败。登录后的自动续跑与最终 FluxDown 任务仍需在已登录账号中复核。
 - 扩展无法读取浏览器密码管理器中的账号密码，因此不做自动填写或自动登录；请使用浏览器「记住登录」保持网盘会话。
 - 当前厂商映射依据 LinkSwift 1.1.4 的 `@connect` 列表与源码 API 常量；登录状态下各网盘实际返回的直链 CDN 是否完全命中映射，仍需端到端页面验证。若出现新 CDN，需要按厂商补充后缀，不能放宽成全局白名单。

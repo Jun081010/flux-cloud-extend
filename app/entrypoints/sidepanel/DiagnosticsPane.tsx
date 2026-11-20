@@ -7,6 +7,8 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 import { browser } from "wxt/browser";
 import type { HostStatus, RuleDocSummary, TabView } from "@/background/protocol";
 import { exportConnectionDiagnostics } from "@/utils/connection-diagnostics";
+import type { DiagnosticEntry } from "@/utils/connection-diagnostics-store";
+import { latestNmhFailure } from "@/utils/nmh-diagnostics-tips";
 import { stringifyResourceDebugLog } from "@/utils/resource-debug-log";
 import { sendAction } from "@/utils/messaging";
 import { Badge } from "@/ui/components/Badge";
@@ -91,6 +93,22 @@ export function DiagnosticsPane(props: Props): JSX.Element {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [exportingLog, setExportingLog] = useState(false);
   const [exportingConn, setExportingConn] = useState(false);
+  const [events, setEvents] = useState<DiagnosticEntry[]>([]);
+
+  // 最近一次连不上的原因：只读快照，不触发探活（探活会唤醒桌面端）。
+  useEffect(() => {
+    let alive = true;
+    browser.runtime
+      .sendMessage({ type: "diagnostics-snapshot" })
+      .then((reply: { ok?: boolean; events?: DiagnosticEntry[] } | undefined) => {
+        if (!alive || reply?.ok !== true || !Array.isArray(reply.events)) return;
+        setEvents(reply.events);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [status?.connected]);
 
   // 规则标题仅用于展示，取不到时回退到 id
   useEffect(() => {
@@ -109,6 +127,7 @@ export function DiagnosticsPane(props: Props): JSX.Element {
   }, []);
 
   const hits = useMemo(() => collectRuleHits(view, t("sidepanel.diag.unnamed")), [view, t]);
+  const nmhFailure = useMemo(() => latestNmhFailure(events), [events]);
 
   const toggle = (id: string) =>
     setExpanded((prev) => {
@@ -148,6 +167,15 @@ export function DiagnosticsPane(props: Props): JSX.Element {
     }
   };
 
+  const copyExtensionId = async () => {
+    try {
+      await navigator.clipboard.writeText(browser.runtime.id);
+      showToast(t("sidepanel.diag.copyIdDone"), "success");
+    } catch {
+      showToast(t("sidepanel.diag.copyIdFailed"), "error");
+    }
+  };
+
   const never = t("sidepanel.diag.never");
   const sync = status?.ruleSync;
   const resolvers = status?.capabilities.resolvers ?? [];
@@ -182,7 +210,41 @@ export function DiagnosticsPane(props: Props): JSX.Element {
         </Row>
         <Row label={t("sidepanel.diag.protocol")}>{status ? `v${status.protocol}` : "—"}</Row>
         <Row label={t("sidepanel.diag.plugins")}>{pluginText}</Row>
+        <Row label={t("sidepanel.diag.extensionId")}>
+          <span class="sp-diag-id">
+            <code class="sp-diag-code">{browser.runtime.id}</code>
+            <Button variant="ghost" size="sm" onClick={copyExtensionId}>
+              {t("sidepanel.diag.copyId")}
+            </Button>
+          </span>
+        </Row>
       </section>
+
+      {nmhFailure && !status?.connected ? (
+        <section class="sp-card sp-diag-hint">
+          <div class="sp-card-head">
+            <span>
+              {t(
+                nmhFailure === "host_not_allowed"
+                  ? "diagnostics.nmh.notAllowedTitle"
+                  : nmhFailure === "host_not_registered"
+                    ? "diagnostics.nmh.notRegisteredTitle"
+                    : "diagnostics.nmh.manifestInvalidTitle",
+              )}
+            </span>
+          </div>
+          <p class="sp-diag-hint-body">
+            {t(
+              nmhFailure === "host_not_allowed"
+                ? "diagnostics.nmh.notAllowedBody"
+                : nmhFailure === "host_not_registered"
+                  ? "diagnostics.nmh.notRegisteredBody"
+                  : "diagnostics.nmh.manifestInvalidBody",
+              { id: browser.runtime.id },
+            )}
+          </p>
+        </section>
+      ) : null}
 
       <section class="sp-card">
         <div class="sp-card-head">
