@@ -12,7 +12,7 @@
 | 最新发布 | v0.1.47（2026-11-20），Release 附件 `FluxDown-Cloud-Extension-0.1.47.zip` + `.zip.sha256` |
 | 分享包 SHA256 | `b5cfd861201143203110ee5850a1eeda6ecbba8e5c1755fb655b7455e06ac1f6`（60,941,233 B） |
 | 扩展版本 | `app/package.json` = manifest = 0.1.47（Edge / Chrome 两套 MV3） |
-| 仓库状态 | `main` = `bcff5c4`；CI 与 CodeQL 均 success；分支保护开启（禁强推 / 禁删除 / 需解决对话） |
+| 仓库状态 | `main` = `7ca4099`；CI 与 CodeQL 均 success；分支保护开启（禁强推 / 禁删除 / 需解决对话） |
 | 测试 | `bun run test:all`：68 个 bun 文件 836 通过 / 1 跳过；3 个 `node:test` 文件 37 通过 |
 | 构建 | `typecheck`、`test:cloud`、`build`、`build:edge` 全过；产物 3.9 MB 级（不含 FFmpeg） |
 | 分发形态 | 绿色包：扩展 + 内置 FFmpeg + 桥脚本 + `一键安装.cmd` / `一键卸载.cmd` |
@@ -21,8 +21,8 @@
 
 | 用途 | 路径 |
 | --- | --- |
-| Codex 工作区 / 分享包归档 | `D:\fluxdown-cloud-extenstion`（只有 0.1.41–0.1.47 的 zip、`.sha256` 与本文件） |
-| 源码 | `E:\codex\fluxdown-cloud-extension`（非 git 仓库；推送通过临时克隆 `E:\codex\tmp\...\repo`） |
+| Codex 工作区 / 分享包归档 | `D:\fluxdown-cloud-extenstion`（0.1.41–0.1.47 zip + `.sha256` + 本文件） |
+| 源码 | `D:\fluxdown-cloud-extenstion\source`（非 git 仓库；`E:\codex\fluxdown-cloud-extension` 为迁移前旧副本，仅作备份） |
 | 临时克隆 | `E:\codex\tmp\flux-cloud-extend-push-*\repo`（`main` 镜像，仅用于提交/推送） |
 
 ## 二、版本时间线
