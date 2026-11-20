@@ -10,6 +10,7 @@
 | 目录 / 文件 | 作用 |
 | --- | --- |
 | `一键安装.cmd` | 唯一需要双击的文件：装扩展、注册桥、装 FFmpeg、重启桌面端、建快捷方式 |
+| `一键卸载.cmd` | 一键清掉桥注册、快捷方式、PATH 与安装目录（不动官方 FluxDown 注册） |
 | `extension\edge-mv3` | Edge 版扩展 |
 | `extension\chrome-mv3` | Chrome 版扩展 |
 | `tools\ffmpeg` | 内置 FFmpeg（合并 B 站 / X 等分离的音视频轨） |
@@ -171,11 +172,34 @@ Edge 的侧载扩展 ID 与「加载路径」绑定。移动或删除扩展目�
 
 ## 卸载
 
-1. 在扩展管理页移除 FluxDown Cloud。
-2. 删除 `%LOCALAPPDATA%\FluxDownCloudExtension`（扩展副本、FFmpeg、备份）。
-3. 删除桌面上的 `FluxDown Cloud (...)` 快捷方式。
-4. 如不需要 FFmpeg，可从「用户环境变量 PATH」里删掉对应的 `...\ffmpeg\bin`。
-5. 可选：`.\scripts\install-native-host.ps1 -Uninstall` 清理桥注册表项。
+1. 先完全退出 FluxDown 桌面端（含托盘图标）。
+2. 双击解压目录里的 **`一键卸载.cmd`**，按提示输入 `y` 确认。
+3. 脚本会删除：`com.fluxdown.cloud.nmh` 桥注册与清单、桌面快捷方式、
+   用户 PATH 里的 `...\ffmpeg\bin`、`%LOCALAPPDATA%\FluxDownCloudExtension` 下的
+   `extension` / `ffmpeg` / `backups`。
+4. 再到 `edge://extensions/`（Chrome 为 `chrome://extensions/`）点「移除」，
+   然后重开浏览器——浏览器不允许脚本自动卸载扩展，这一步必须手动做。
+
+只想预览会删什么，可以先运行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -WhatIf -Force
+```
+
+想保留备份（注册表备份、旧 PATH 备份）就加 `-KeepBackups`。
+官方 `com.fluxdown.nmh` 注册与 FluxDown 安装目录不会被改动。
+
+## 校验下载包
+
+压缩包旁边有同名的 `.zip.sha256` 文件，内容为 `<sha256>  <zip 文件名>`。
+在解压目录执行下面命令核对（把文件名换成实际下载的名字）：
+
+```powershell
+certutil -hashfile .\FluxDown-Cloud-Extension-{{VERSION}}.zip SHA256
+Get-Content .\FluxDown-Cloud-Extension-{{VERSION}}.zip.sha256
+```
+
+两行哈希应完全一致。包内 `tools\ffmpeg\SHA256SUMS.txt` 记录了随包 FFmpeg 的哈希。
 
 ## 许可
 

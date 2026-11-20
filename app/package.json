@@ -1,9 +1,14 @@
 {
   "name": "flux-down-extension",
   "description": "FluxDown browser extension - intercept downloads and send to FluxDown app",
-  "version": "0.1.45",
+  "version": "0.1.46",
   "private": true,
   "type": "module",
+  "packageManager": "bun@1.4.5",
+  "engines": {
+    "node": ">=20",
+    "bun": ">=1.4.5"
+  },
   "scripts": {
     "dev": "wxt",
     "dev:firefox": "wxt --browser firefox",
@@ -14,11 +19,14 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip --browser firefox",
     "postinstall": "wxt prepare",
-    "test": "bun test",
+    "test": "bun test --isolate --path-ignore-patterns='**/cloud-bridge.test.ts' --path-ignore-patterns='**/cloud-downloads.test.ts' --path-ignore-patterns='**/download-urls-audio.test.ts'",
+    "test:node": "node --test background/cloud-bridge.test.ts background/cloud-downloads.test.ts background/download-urls-audio.test.ts",
+    "test:all": "bun run test && bun run test:node",
     "test:cloud": "node ../scripts/test-linkswift-patch.mjs",
     "typecheck": "wxt prepare && tsc --noEmit"
   },
   "devDependencies": {
+    "linkedom": "0.18.12",
     "typescript": "^5.7.0",
     "wxt": "^0.20.14"
   },

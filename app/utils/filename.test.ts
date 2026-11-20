@@ -9,7 +9,20 @@ import {
   readDispositionHeader,
   resolveDownloadFilename,
 } from "./filename";
-import fixtures from "../../native/engine/src/naming/fixtures/content_disposition.json";
+import { existsSync, readFileSync } from "node:fs";
+
+/**
+ * 与 FluxDown 引擎仓库共享的 Content-Disposition 用例表（`native/engine/src/naming/fixtures/`）。
+ * 引擎源码不随本扩展仓库分发，因此这里按「存在则跑、缺失则跳过」处理：静态 import 会让整份
+ * 测试文件在缺文件时直接加载失败，连本文件自有的文件名用例都跑不到。
+ */
+const sharedFixtureUrl = new URL(
+  "../../native/engine/src/naming/fixtures/content_disposition.json",
+  import.meta.url,
+);
+const sharedFixtures: { cases: FixtureCase[] } | null = existsSync(sharedFixtureUrl)
+  ? JSON.parse(readFileSync(sharedFixtureUrl, "utf8"))
+  : null;
 
 /** 反查表：用 TextDecoder 枚举双字节码位，把字符串编码为 GBK/Big5 字节。 */
 function legacyEncoder(label: "gbk" | "big5") {
@@ -222,7 +235,7 @@ describe("shared content_disposition fixtures", () => {
     expected: string | null;
   }
 
-  const cases: FixtureCase[] = fixtures.cases;
+  const cases: FixtureCase[] = sharedFixtures?.cases ?? [];
 
   const rawBytes = (c: FixtureCase): Uint8Array =>
     c.headerHex !== undefined
@@ -232,6 +245,11 @@ describe("shared content_disposition fixtures", () => {
       : new TextEncoder().encode(c.header ?? "");
 
   const latin1 = (bytes: Uint8Array) => String.fromCharCode(...bytes);
+
+  if (cases.length === 0) {
+    test.skip("未找到引擎共享用例表（native/engine/src/naming/fixtures/content_disposition.json），已跳过", () => {});
+    return;
+  }
 
   for (const c of cases) {
     const hints = { host: c.host, pageCharset: c.pageCharset };

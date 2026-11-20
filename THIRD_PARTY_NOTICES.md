@@ -20,7 +20,7 @@
 
 以下固定版本文件由 `vendor/LinkSwift/` 随项目分发，并由 `scripts/patch-linkswift.mjs` 复制到 `app/public/cloud/vendor/`；上游 LinkSwift 以 `@require` / `@resource` 声明它们。前三个 JS 依赖在生成 `app/public/cloud/linkswift.bundle.js` 时由构建期包装器隔离加载，两份 CSS 由 background 读入 boot 的 `resources`，再由 shim 通过 `GM_getResourceText` 提供；页面原有 `jQuery` / `$` / `Swal` / `md5` 等引用保持。
 
-实际注入浏览器的是 `app/public/cloud/linkswift.bundle.js`（当前 970479 bytes，SHA-256 `96d3a72f05da4aad99c63a931f98e99f8b8e53d610a68d84a11d4cdeca6f3460`）；`linkswift.user.js` 只作为补丁审计副本。运行时不会从 unpkg 拉取上述依赖。构建脚本与补丁测试均已在本项目内实际执行。
+实际注入浏览器的是 `app/public/cloud/linkswift.bundle.js`（当前 984404 bytes，SHA-256 `c9b20466486d3e232a30222b4940ece6c1f8d9853923d52edebb3fff20bb3fe1`）；`linkswift.user.js` 只作为补丁审计副本（840263 bytes，SHA-256 `86d61a4692e975097e17b8cb9911faeb635940506ffa453dd6dec484b304caab`）。运行时不会从 unpkg 拉取上述依赖。构建脚本与补丁测试均已在本项目内实际执行，两者的哈希由 `bun run test:cloud` 与 `Get-FileHash` 复核。
 
 ### jQuery
 

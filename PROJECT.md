@@ -14,13 +14,13 @@
 
 ## 不可变边界
 
-- 不修改 `D:\FluxDown-0.2.3-windows-x64` 内的可执行文件。
+- 不修改 `<FluxDown 安装目录>` 内的可执行文件。
 - 不读取、追加或修改官方 `com.fluxdown.nmh` 清单与官方两个 HKCU 键（那是桌面端官方主机名，本项目不再使用）；本项目注册独立主机名 `com.fluxdown.cloud.nmh`。
 - 不改 FluxDown 的 Rust/Native Messaging 协议。
 - 不绕过网盘会员、限速或鉴权；只使用 LinkSwift 已实现的公开 API 获取链接。
 - 不把 Cookie、令牌写入日志、URL、遥测或可导出的调试信息。
 - 不保存网盘账号、密码或 Cookie 副本；登录状态由浏览器自身持久化。
-- 所有新增或修改文件必须位于 `E:\codex\fluxdown-cloud-extension`。
+- 所有新增或修改文件必须位于本仓库根目录内。
 - 第三方代码保持 AGPL-3.0 许可与署名；本项目整体按 AGPL-3.0 发布。
 
 ## 目录
@@ -172,16 +172,16 @@ shim 至少提供：
 
 以下为验收清单；已执行项记录实际结果，未执行项单独列出：
 
-1. 已通过：`node scripts/test-linkswift-patch.mjs`，补丁审计副本 sha256=`1ee8b0d3328713eec159b5b859401e08b584484a76d130c5127d21d318172663`，826338 bytes。
-2. 已通过：`node --experimental-strip-types --test app\background\cloud-bridge.test.ts app\background\cloud-downloads.test.ts`，25/25。
-3. 已通过：`npm run typecheck`。
-4. 已通过：`npm run test:cloud`；`npm run build:edge`；`npm run build`。
+1. 已通过：`bun run test:cloud`，补丁审计副本 `linkswift.user.js` sha256=`86d61a4692e975097e17b8cb9911faeb635940506ffa453dd6dec484b304caab`、840263 bytes；注入产物 `linkswift.bundle.js` sha256=`c9b20466486d3e232a30222b4940ece6c1f8d9853923d52edebb3fff20bb3fe1`、984404 bytes。
+2. 已通过：`bun run test:all`（67 个 `bun:test` 文件 829 通过 / 1 跳过，3 个 `node:test` 文件 37 通过）。
+3. 已通过：`bun run typecheck`。
+4. 已通过：`bun run build:edge`；`bun run build`。
 5. 已核对：Edge/Chrome 的 `manifest.json` 中 WAR matches 为云盘 patterns，cloud content script 为 `all_frames: false`、`run_at: document_start`，四个 `/cloud/` 资源均在产物中。
 6. 已核对：构建产物的 `linkswift.bundle.js`、`linkswift-gm-shim.js` 哈希与 `app/public/cloud/` 一致。
 7. 已用 Node 直连原生宿主验证 `ping` 返回 `{"success":true,"message":"pong"}`；未确认真实任务出现在 FluxDown 列表。
 8. Native Messaging 已改用独立主机名 `com.fluxdown.cloud.nmh`：桌面端 `fluxdown-agent.exe` 每次启动会重写官方 `com.fluxdown.nmh.json`（只含官方扩展 ID）并把官方两个 HKCU 键指回该清单，旁加载 ID 被挤出白名单且每次重启复发；中继 `fluxdown_nmh.exe` 不读取主机名，换名不影响下载链路。新落点：清单 `%LOCALAPPDATA%\FluxDownCloudExtension\nmh\com.fluxdown.cloud.nmh.json`，注册表键 `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.fluxdown.cloud.nmh` 与 `HKCU\Software\Microsoft\Edge\NativeMessagingHosts\com.fluxdown.cloud.nmh`，备份 `%LOCALAPPDATA%\FluxDownCloudExtension\backups\nmhcloud-backup-<时间戳>.json`。
 9. 已完成独立 GLM 只读复核：未发现 P0；提出 2 个 P1（HTTP sender、注入异步 TOCTOU）与 2 个 P2（存储未按厂商分区、响应体先整读后限长）。对应修复已落盘并新增测试；剩余风险是 `executeScript` 没有 `documentId` 原子绑定，校验与注入之间仍存在极短竞态，已用二次标签页校验与 boot origin guard 收窄。
-10. 已通过：`npx --yes bun test entrypoints/panel.content/drop-target.test.ts rules/x-rules.test.ts`（内核落点选择 + X 规则 13/13）；`npm run typecheck`；`npm run build:edge`。
+10. 已通过：`bun test entrypoints/panel.content/drop-target.test.ts rules/x-rules.test.ts`（内核落点选择 + X 规则 13/13）；`bun run typecheck`；`bun run build:edge`。
 11. 已通过：隔离 Edge（CDP 9223）+ 本地测试页内核球冒烟：悬浮球显示、Shift 拖出内核、失败停留并提示、轻点收回、拖放发起下载（NMH 未连时保留内核）。
 12. 未验证：X / Twitter 真实页面（当前网络不可达）；DRM / 登录 / 会员内容不承诺可下载。
 

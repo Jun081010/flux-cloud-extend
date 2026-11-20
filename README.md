@@ -6,7 +6,7 @@
 
 ## 分享包（给朋友）
 
-`scripts/package-release.ps1` 会在桌面生成 `FluxDown-Cloud-Extension-<版本>.zip`，里面包含 Edge / Chrome 两套扩展、内置 FFmpeg、桥注册脚本与根目录的 `一键安装.cmd`。朋友解压后只需双击 `一键安装.cmd`：
+`scripts/package-release.ps1` 会在桌面生成 `FluxDown-Cloud-Extension-<版本>.zip`（并附带同名的 `.zip.sha256` 校验文件），里面包含 Edge / Chrome 两套扩展、内置 FFmpeg、桥注册脚本，以及根目录的 `一键安装.cmd` 与 `一键卸载.cmd`。朋友解压后只需双击 `一键安装.cmd`：
 
 1. 自动识别浏览器并复制扩展到 `%LOCALAPPDATA%\FluxDownCloudExtension\extension\<浏览器>-mv3`（已有安装则原地更新，扩展 ID 不变）。
 2. 计算扩展 ID 并注册 `com.fluxdown.cloud.nmh` 桥（HKCU，自动备份）。
@@ -17,6 +17,8 @@
 `0.1.42` 及更早的分享包没有打包 FFmpeg，B 站 / X 等分离音轨的视频会静默变成无声视频；`0.1.45` 起随包内置并在安装后自动重启桌面端。
 
 更新同样只需解压覆盖后再次双击；最后在扩展页点一次「重新加载」或重启浏览器。完整说明见 `scripts/release-readme-template.md`。
+
+卸载时先退出 FluxDown 桌面端，再双击 `一键卸载.cmd`：它会注销 `com.fluxdown.cloud.nmh`、删除桌面快捷方式、从用户 PATH 移除本项目追加的 `...\ffmpeg\bin`，并清掉 `%LOCALAPPDATA%\FluxDownCloudExtension`（可用 `-KeepBackups` 保留备份）。官方 `com.fluxdown.nmh` 与 FluxDown 安装目录不受影响；浏览器里的扩展仍需在扩展页手动「移除」。
 
 ## 目录
 
@@ -33,19 +35,18 @@
 
 ## 构建
 
-前置条件：Node.js、npm，以及已安装的依赖。构建脚本 `prebuild` 会自动运行 `scripts/patch-linkswift.mjs`。
+前置条件：Bun 1.4.5（`app/package.json` 的 `packageManager` 已固定，依赖唯一锁文件为 `app/bun.lock`）与 Node.js 20+（`test:cloud`、`test:node` 与 WXT 工具链走 Node 入口）。构建脚本 `prebuild` 会自动运行 `scripts/patch-linkswift.mjs`。
 
 ```powershell
-cd E:\codex\fluxdown-cloud-extension
-cd app
-npm install
-npm run build
+cd <仓库根目录>\app
+bun install --frozen-lockfile
+bun run build
 ```
 
 Edge 目标可改用：
 
 ```powershell
-npm run build:edge
+bun run build:edge
 ```
 
 WXT 默认把 MV3 产物放在 `app\.output\chrome-mv3`；Edge 构建通常为 `app\.output\edge-mv3`。构建产物应包含 `cloud/linkswift-gm-shim.js`、`cloud/linkswift.bundle.js`、`cloud/linkswift.user.js` 与 `cloud/vendor/` 中的两份 CSS；其中 `linkswift.bundle.js` 是注入文件，`linkswift.user.js` 只作补丁审计副本。注入顺序为 boot（`channelId` + `values` + `resources`）→ `linkswift-gm-shim.js` → `linkswift.bundle.js`。实际目录名以构建结果为准，加载前先查看：
@@ -179,7 +180,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-hos
 - 网盘接口与页面结构易变，LinkSwift 补丁可能需要随上游更新。
 - 受支持网盘页面必须使用 HTTPS；HTTP 页面不会注入，也不会被接受为 sender。
 - 分离音轨的合并由桌面端完成：需要 FluxDown 能找到 FFmpeg（PATH 或「设置 → 组件」手动路径）。分享包从 `0.1.44` 起内置 FFmpeg，`0.1.45` 起安装脚本会在无活跃任务时自动重启桌面端使其生效。
-- 已通过补丁测试、25 个后台行为测试、类型检查、Edge/Chrome 构建；内核小球在隔离 Edge（CDP 9223）+ 本地测试页冒烟验证：悬浮球显示、Shift 拖出内核、失败停留并提示、轻点收回、拖放发起下载（NMH 未连时保留内核）。
+- 已通过补丁测试、`bun run test:all`（67 个 bun 测试文件 829 通过 / 1 跳过，3 个 `node:test` 文件 37 通过）、类型检查、Edge/Chrome 构建；内核小球在隔离 Edge（CDP 9223）+ 本地测试页冒烟验证：悬浮球显示、Shift 拖出内核、失败停留并提示、轻点收回、拖放发起下载（NMH 未连时保留内核）。
 - 百度网盘分享页已用真实链接验证：自动模式会触发、初始化状态不再挡住「下载助手」、未登录时会提示并持续等待，60 秒内不会提前判失败。登录后的自动续跑与最终 FluxDown 任务仍需在已登录账号中复核。
 - 扩展无法读取浏览器密码管理器中的账号密码，因此不做自动填写或自动登录；请使用浏览器「记住登录」保持网盘会话。
 - 当前厂商映射依据 LinkSwift 1.1.4 的 `@connect` 列表与源码 API 常量；登录状态下各网盘实际返回的直链 CDN 是否完全命中映射，仍需端到端页面验证。若出现新 CDN，需要按厂商补充后缀，不能放宽成全局白名单。
@@ -202,16 +203,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-hos
 已在本环境实际执行并通过：
 
 ```powershell
-cd E:\codex\fluxdown-cloud-extension
-node scripts/test-linkswift-patch.mjs
-node --experimental-strip-types --test app\background\cloud-bridge.test.ts app\background\cloud-downloads.test.ts
-cd app
-npm run typecheck
-npm run test:cloud
-npm run build:edge
-npm run build
+cd <仓库根目录>\app
+bun install --frozen-lockfile
+bun run test:cloud
+bun run typecheck
+bun run test:all
+bun run build:edge
+bun run build
 ```
 
-实际结果：补丁测试通过，sha256=`1ee8b0d3328713eec159b5b859401e08b584484a76d130c5127d21d318172663`；后台行为测试 25/25 通过；`typecheck` 通过；Edge 与 Chrome MV3 构建成功。产物位于 `app\.output\edge-mv3` 与 `app\.output\chrome-mv3`。
+实际结果：补丁测试通过（审计副本 `linkswift.user.js` 840263 bytes、sha256=`86d61a4692e975097e17b8cb9911faeb635940506ffa453dd6dec484b304caab`；注入产物 `linkswift.bundle.js` 984404 bytes、sha256=`c9b20466486d3e232a30222b4940ece6c1f8d9853923d52edebb3fff20bb3fe1`）；`typecheck` 通过；Edge 与 Chrome MV3 构建成功。
+
+测试分成两批，`bun run test:all` 会依次跑完：
+
+- `bun run test`：`bun:test` 用例，开机即用 `--isolate` 隔离每个文件的全局对象。`cloud-bridge` / `cloud-downloads` / `download-urls-audio` 三个文件用 `node:test` + `node:module` 的 `registerHooks`，Bun 未实现该 API，因此从这批里排除。
+- `bun run test:node`：上面三个文件，需要 Node 20+（本机 Node 26 验证通过，37 个用例）。
+- `app/utils/filename.test.ts` 里与 FluxDown 引擎共享的用例表位于 `native/engine/src/naming/fixtures/content_disposition.json`，该文件不随本仓库分发；缺失时这组用例标记为 `skip`，其余文件名用例照常执行。
 
 仍需在目标机器上执行：登录网盘后真实推送任务并核对 FluxDown 任务列表。安装脚本可先用 `-WhatIf` 预览；实际注册、浏览器加载与扩展 ID 获取需按上文步骤单独验证。

@@ -1,15 +1,22 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { createStorageArea } from "@/utils/storage-mock.test-util";
 import type { DownloadRequest } from "@/utils/native-messaging";
+import { extractCleanFilename } from "@/utils/filename";
 
 const local = createStorageArea();
 const sync = createStorageArea();
 mock.module("wxt/browser", () => ({
   browser: {
     storage: { local, sync },
-    runtime: { getPlatformInfo: async () => ({ os: "linux" }) },
+    runtime: {
+      getPlatformInfo: async () => ({ os: "linux" }),
+      sendMessage: async () => undefined,
+    },
     cookies: { getAll: async () => [] },
     alarms: { get: async () => undefined, create: async () => {}, clear: async () => {} },
+    tabs: { create: async () => ({}) },
+    downloads: { download: async () => 1 },
+    notifications: { create: () => {} },
   },
 }));
 
@@ -40,6 +47,19 @@ mock.module("./breaker", () => ({
 }));
 mock.module("./tasks", () => ({ maybeArmTaskPollForChannel: () => {} }));
 
+// sender.ts 会直接调用 nmhListTasks 判断「引擎是否已经建好任务」（duplicate 命中时）。
+// 真实实现在测试进程里没有 connectNative，会抛错并污染失败/回退分支，导致去重断言失真。
+const realNativeMessaging = await import("@/utils/native-messaging");
+mock.module("@/utils/native-messaging", () => ({
+  ...realNativeMessaging,
+  // 引擎侧「已建任务」校验要求 fileName 与 URL 推导出的名字一致、createdAt 在 15s 内；
+  // 返回空列表会被判定为引擎未建任务，进而走浏览器回退分支并让用例超时。
+  nmhListTasks: async () => ({
+    success: true,
+    tasks: [{ createdAt: Date.now() / 1000, fileName: extractCleanFilename(undefined, url) }],
+  }),
+}));
+
 // 必须先 mock 再加载被测模块（与 host-page-scripts.test.ts 同一约定），故此处动态导入。
 const { sendToFluxDown } = await import("./sender");
 const { requestRecordCache } = await import("./request-cache");
@@ -67,6 +87,7 @@ describe("sendToFluxDown 自动拦截去重接线", () => {
     expect(a.success && b.success).toBe(true);
   });
 
+  // 每次成功发送后 sender 会等 3s 再校验引擎任务，两次发送串行执行会超过默认 5s 超时。
   test("同 URL、不同 POST body 的两次自动拦截都要送达（不得静默丢弃第二个）", async () => {
     post("1");
     await sendToFluxDown({ url, origin: "intercept" });
@@ -75,7 +96,7 @@ describe("sendToFluxDown 自动拦截去重接线", () => {
     expect(second.success).toBe(true);
     expect(dispatched.map((r) => r.method)).toEqual(["POST", "POST"]);
     expect(dispatched.map((r) => r.body)).toEqual([form("1"), form("2")]);
-  });
+  }, 15000);
 
   test("同 URL、同 POST body 的重复自动拦截仍只送达一次", async () => {
     post("1");
@@ -90,7 +111,7 @@ describe("sendToFluxDown 自动拦截去重接线", () => {
     post("1");
     await sendToFluxDown({ url, origin: "intercept" });
     expect(dispatched.map((r) => r.method)).toEqual([undefined, "POST"]);
-  });
+  }, 15000);
 
   test("手动发送与带 channel 的发送不去重", async () => {
     await sendToFluxDown({ url });

@@ -1,0 +1,16 @@
+# Keep binary payloads out of text diff/normalization.
+*.exe binary
+*.zip binary
+*.7z binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+
+# Windows launchers must keep CRLF so cmd.exe and PowerShell 5.1 behave.
+*.cmd text eol=crlf
+*.bat text eol=crlf
