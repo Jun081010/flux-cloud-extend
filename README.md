@@ -32,6 +32,7 @@
 - `app/public/cloud/linkswift-gm-shim.js`：MAIN world 的 GM_* 兼容层与 FluxDown 调用桥。
 - `app/public/cloud/vendor/`：本地运行时依赖，含 jQuery 3.6.0、SweetAlert2 11.4.8、SweetAlert2 dark theme 5.0.26、js-md5 0.7.3，以及 `sweetalert2.min.css`、`sweetalert2-dark.min.css`。前三个 JS 依赖由构建期包装器隔离加载，页面原有 `jQuery` / `$` / `Swal` / `md5` 等引用保持；两份 CSS 在 boot 阶段作为资源原文传给 shim。
 - `LICENSE`、`THIRD_PARTY_NOTICES.md`：许可证与第三方组件说明。
+- `STATUS.md`：项目进度、已知缺陷、关键点与待办（交接用）。
 
 ## 构建
 
