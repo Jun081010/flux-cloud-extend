@@ -12,7 +12,7 @@
 | 最新发布 | v0.1.47（2026-11-20），Release 附件 `FluxDown-Cloud-Extension-0.1.47.zip` + `.zip.sha256` |
 | 分享包 SHA256 | `b5cfd861201143203110ee5850a1eeda6ecbba8e5c1755fb655b7455e06ac1f6`（60,941,233 B） |
 | 扩展版本 | `app/package.json` = manifest = 0.1.47（Edge / Chrome 两套 MV3） |
-| 仓库状态 | `main` = `c78065e`；CI 与 CodeQL 均 success；分支保护开启（禁强推 / 禁删除 / 需解决对话） |
+| 仓库状态 | `main` 已含 2026-11-20 的源码工作区迁移与 STATUS 更新；最近两次提交的 CI 与 CodeQL 均 success；分支保护开启（禁强推 / 禁删除 / 需解决对话） |
 | 测试 | `bun run test:all`：68 个 bun 文件 836 通过 / 1 跳过；3 个 `node:test` 文件 37 通过 |
 | 构建 | `typecheck`、`test:cloud`、`build`、`build:edge` 全过；产物 3.9 MB 级（不含 FFmpeg） |
 | 分发形态 | 绿色包：扩展 + 内置 FFmpeg + 桥脚本 + `一键安装.cmd` / `一键卸载.cmd` |
@@ -152,6 +152,52 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-release.ps
 ```
 
 产物默认落在桌面：`FluxDown-Cloud-Extension-<版本>.zip`、`.zip.sha256`，并校验 FFmpeg 固定哈希与 12 项包内文件。
+
+源码目录 `D:\fluxdown-cloud-extenstion\source` **不是 git 仓库**，历史只在 GitHub 与临时克隆里；提交前先把改动同步进克隆。
+
+先查清仓库实际跟踪的顶层内容（实测：`.gitattributes`、`LICENSE`、`PROJECT.md`、`README.md`、`STATUS.md`、`THIRD_PARTY_NOTICES.md`、`.github`、`app`、`scripts`、`tools`、`vendor`、`.gitignore`，共 349 个文件；`tools/ffmpeg/*.exe`、`app/node_modules`、`app/.output`、`app/.wxt` 等被 `.gitignore` 排除）：
+
+```powershell
+git -C <clone> ls-files | %{ ($_ -split '/')[0] } | Sort-Object -Unique
+```
+
+同步（只按 `git ls-files` 复制跟踪文件；下面命令已用未改动的源码目录实测，`git status --porcelain` 输出为空）：
+
+```powershell
+$clone = 'E:\codex\tmp\flux-cloud-extend-push-20261120-113240\repo'
+$src   = 'D:\fluxdown-cloud-extenstion\source'
+git -C $clone reset --hard origin/main
+git -C $clone ls-files | %{
+  $from = Join-Path $src ($_ -replace '/', '\')
+  $to   = Join-Path $clone ($_ -replace '/', '\')
+  if (-not (Test-Path -LiteralPath $from -PathType Leaf)) { return }   # .gitignore 等只在克隆维护的文件
+  if (Test-Path -LiteralPath $to -PathType Leaf) {
+    $oldText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($from)) -replace "`r`n", "`n"
+    $newText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($to))   -replace "`r`n", "`n"
+    if ($oldText -ceq $newText) { return }   # 仅 CRLF/LF 换行差异时不改克隆工作副本
+  }
+  [void][IO.Directory]::CreateDirectory((Split-Path -Parent $to))
+  [IO.File]::Copy($from, $to, $true)
+}
+git -C $clone status --porcelain
+```
+
+说明：提交前用 `git -C $clone status --porcelain` 确认待提交项，`git diff` 自查；仓库的 `.gitignore` 由克隆维护，源码目录缺失时跳过。严禁使用 `robocopy /MIR`（会删掉克隆的 `.git`），也不要复制 `.git`、`node_modules`、`.output`、`.wxt`。
+
+提交与推送（普通 push，不要 force）：
+
+```powershell
+git -C $clone add STATUS.md
+git -C $clone commit -m "Clarify repo status line and document push workflow"
+git -C $clone push origin main
+```
+
+推送后确认远端与 CI：
+
+```powershell
+& 'C:\Program Files\GitHub CLI\gh.exe' api repos/Jun081010/flux-cloud-extend/commits/main --jq .sha
+& 'C:\Program Files\GitHub CLI\gh.exe' run list -R Jun081010/flux-cloud-extend -L 2
+```
 
 ## 九、待办（按优先级）
 
