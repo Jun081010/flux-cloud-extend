@@ -1,0 +1,389 @@
+/*
+ * 页内 UI：悬浮圆点 + 资源面板（Shadow DOM 隔离）。
+ * 圆点统一用 left 定位（右侧停靠用 calc(100% - N)），避免 left/right 切换时过渡无法插值。
+ */
+:host {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  /* #305：不让扩展 UI 进入页面的全选 / 复制。WXT 对 :host 做了 all: initial !important，
+   * 所以这两条需要 !important 才能生效。 */
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+*,
+*::before,
+*::after {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.fluxdown-dot {
+  position: fixed;
+  z-index: 2147483647;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--fd-surface);
+  border: 1.5px solid rgba(59, 130, 246, 0.4);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease;
+  touch-action: none;
+}
+.fluxdown-dot.right { left: calc(100% - 40px); }
+.fluxdown-dot.right:hover,
+.fluxdown-dot.right.active { left: calc(100% - 44px); }
+.fluxdown-dot.left { left: 4px; }
+.fluxdown-dot.left:hover,
+.fluxdown-dot.left.active { left: 8px; }
+.fluxdown-dot:hover {
+  border-color: rgba(59, 130, 246, 0.7);
+  box-shadow: 0 2px 20px rgba(59, 130, 246, 0.25);
+  transform: scale(1.08);
+}
+.fluxdown-dot.active { background: var(--fd-accent-hover); border-color: var(--fd-accent); box-shadow: 0 2px 20px rgba(59, 130, 246, 0.4); }
+.fluxdown-dot.dragging { transition: none !important; transform: scale(1.12); box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35); cursor: grabbing; }
+.fluxdown-dot .dot-icon { color: var(--fd-accent); }
+.fluxdown-dot.active .dot-icon { color: #fff; }
+.fluxdown-dot .fluxdown-core {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--fd-accent);
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.8);
+  pointer-events: none;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+.fluxdown-dot:hover .fluxdown-core { box-shadow: 0 0 10px rgba(59, 130, 246, 0.9); }
+.fluxdown-dot.active .fluxdown-core { background: #fff; }
+.fluxdown-dot.dragging .fluxdown-core { background: var(--fd-accent-hover); }
+.fluxdown-dot.can-drop .fluxdown-core {
+  background: #22c55e;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.9);
+}
+.fluxdown-core-free {
+  position: fixed;
+  z-index: 2147483647;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--fd-accent);
+  box-shadow: 0 2px 14px rgba(59, 130, 246, 0.6);
+  cursor: grab;
+  touch-action: none;
+  transition: box-shadow 0.15s ease;
+}
+.fluxdown-core-free.dragging {
+  pointer-events: none;
+  cursor: grabbing;
+  box-shadow: 0 4px 18px rgba(59, 130, 246, 0.75);
+}
+.fluxdown-core-free.can-drop {
+  background: #22c55e;
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.8);
+  transform: scale(1.35);
+}
+.fd-drop-ring {
+  position: fixed;
+  z-index: 2147483646;
+  border: 2px solid #22c55e;
+  border-radius: 6px;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.25);
+  pointer-events: none;
+}
+.fluxdown-dot .dot-badge {
+  position: absolute;
+  top: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: #ef4444;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+.fluxdown-dot.right .dot-badge { left: -4px; }
+.fluxdown-dot.left .dot-badge { right: -4px; }
+.fluxdown-dot .dot-badge.show { opacity: 1; transform: scale(1); }
+
+.fluxdown-panel {
+  position: fixed;
+  z-index: 2147483646;
+  display: flex;
+  flex-direction: column;
+  width: min(380px, calc(100vw - 16px));
+  max-height: 460px;
+  background: var(--fd-bg);
+  color: var(--fd-text);
+  border: 1px solid var(--fd-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+
+  /* #305：关闭态 visibility:hidden，使其退出页面全选 / 复制；
+   * 过渡延迟到 opacity 淡出结束，保留关闭动画；打开时立即 visible。 */
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s;
+}
+.fluxdown-panel.right { transform: scale(0.92) translateX(12px); }
+.fluxdown-panel.left { transform: scale(0.92) translateX(-12px); }
+/* 展开态必须是 transform: none：非 none 的 transform 会成为 fixed 后代（预览弹层）的包含块，把弹层困在面板里 */
+.fluxdown-panel.visible {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transform: none;
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s;
+}
+
+/* 窄屏（手机竖屏）：面板贴视口两侧各留 8px，取代固定的 52px 偏移；
+ * 内联 style 带 left/right: 52px，需 !important 覆盖。圆点展开时沉到面板下方，避免盖住头部按钮。 */
+@media (max-width: 460px) {
+  .fluxdown-panel,
+  .fluxdown-panel.left,
+  .fluxdown-panel.right {
+    left: 8px !important;
+    right: 8px !important;
+    width: auto;
+  }
+  .fluxdown-dot.active {
+    z-index: 2147483645;
+  }
+}
+
+/* 触屏（无 hover 滑出）：圆点放大并多露出一截，常驻可点；hover 在触屏上会粘滞，故不再滑出，仅展开面板时滑出 */
+@media (pointer: coarse) {
+  .fluxdown-dot { width: 40px; height: 40px; }
+  .fluxdown-dot.right,
+  .fluxdown-dot.right:hover { left: calc(100% - 44px); }
+  .fluxdown-dot.left,
+  .fluxdown-dot.left:hover { left: 4px; }
+  .fluxdown-dot:hover { transform: none; }
+  .fluxdown-dot.right.active { left: calc(100% - 48px); }
+  .fluxdown-dot.left.active { left: 8px; }
+  .fluxdown-dot.dragging { transform: scale(1.12); }
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 8px 0 14px;
+  flex-shrink: 0;
+  background: var(--fd-hover);
+  border-bottom: 1px solid var(--fd-border);
+}
+.panel-header .logo { color: var(--fd-accent); margin-right: 6px; }
+.panel-header .title { flex: 1; font-size: 13px; font-weight: 600; }
+.panel-header .resource-count { margin-right: 6px; font-size: 11px; color: var(--fd-text-secondary); }
+.panel-body { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 8px 8px; }
+.fd-cloud-hint {
+  margin: 2px 4px 8px;
+}
+.fd-cloud-share {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--fd-border);
+  border-radius: 8px;
+  background: var(--fd-hover);
+}
+.fd-cloud-share-url {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--fd-text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+.fd-cloud-share-action {
+  flex-shrink: 0;
+  padding: 5px 9px;
+  border: 1px solid var(--fd-accent);
+  border-radius: 6px;
+  background: var(--fd-accent);
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.fd-cloud-share-action:hover {
+  background: var(--fd-accent-hover);
+}
+.fd-cloud-hint > div:first-child {
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--fd-accent) 35%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--fd-accent) 10%, transparent);
+  color: var(--fd-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* 网盘目录：悬浮窗内直接浏览分享页文件，点击即发送到 FluxDown。 */
+.fd-cloud-browser {
+  margin: 2px 4px 10px;
+  border: 1px solid var(--fd-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--fd-surface);
+}
+.fd-cloud-browser-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  background: var(--fd-hover);
+  border-bottom: 1px solid var(--fd-border);
+}
+.fd-cloud-browser-title {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+}
+.fd-cloud-browser-actions {
+  display: flex;
+  gap: 4px;
+}
+.fd-cloud-browser-actions button,
+.fd-cloud-error button {
+  padding: 3px 7px;
+  border: 1px solid var(--fd-border);
+  border-radius: 5px;
+  background: var(--fd-surface);
+  color: var(--fd-text-secondary);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.fd-cloud-browser-actions button:hover,
+.fd-cloud-error button:hover {
+  border-color: var(--fd-accent);
+  color: var(--fd-accent);
+}
+.fd-cloud-browser-actions button:disabled,
+.fd-cloud-row-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.fd-cloud-path {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--fd-border);
+  color: var(--fd-text-secondary);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fd-cloud-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  color: var(--fd-text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.fd-cloud-error {
+  color: var(--fd-danger);
+  background: var(--fd-danger-muted);
+  flex-wrap: wrap;
+}
+.fd-cloud-error button {
+  color: var(--fd-danger);
+  border-color: color-mix(in srgb, var(--fd-danger) 45%, transparent);
+}
+.fd-cloud-list {
+  max-height: 220px;
+  overflow-y: auto;
+}
+.fd-cloud-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--fd-border);
+}
+.fd-cloud-row:last-child {
+  border-bottom: none;
+}
+.fd-cloud-row:hover {
+  background: var(--fd-hover);
+}
+.fd-cloud-kind {
+  flex-shrink: 0;
+  width: 30px;
+  padding: 1px 0;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.fd-cloud-kind.dir {
+  color: var(--fd-accent);
+  background: var(--fd-accent-muted);
+}
+.fd-cloud-kind.file {
+  color: var(--fd-text-secondary);
+  background: var(--fd-hover);
+}
+.fd-cloud-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fd-cloud-meta {
+  flex-shrink: 0;
+  color: var(--fd-text-secondary);
+  font-size: 9px;
+  white-space: nowrap;
+}
+.fd-cloud-row-action {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  border: 1px solid var(--fd-accent);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--fd-accent);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.fd-cloud-row-action:hover {
+  background: var(--fd-accent);
+  color: #fff;
+}

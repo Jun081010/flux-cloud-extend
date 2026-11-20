@@ -1,0 +1,12 @@
+app/node_modules/
+app/.output/
+app/.wxt/
+app/dist/
+app/.tmp-xcheck/
+.output/
+.wxt/
+.edge-*/
+.test-artifacts/
+_copy-artifact-*/
+*.zip
+tools/ffmpeg/*.exe
