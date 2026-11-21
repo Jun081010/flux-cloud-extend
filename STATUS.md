@@ -13,7 +13,7 @@
 | 分享包 SHA256 | `cacb9089143eb9a33bdcf73a864684ec248241d35a85057c542371aa9ef63f19`（60,943,089 B） |
 | 扩展版本 | `app/package.json` = manifest = 0.1.48（Edge / Chrome 两套 MV3） |
 | 仓库状态 | `main` 已含 2026-11-20 的源码工作区迁移与 STATUS 更新；最近两次提交的 CI 与 CodeQL 均 success；分支保护开启（禁强推 / 禁删除 / 需解决对话） |
-| 测试 | `bun run test:all`：68 个 bun 文件 836 通过 / 1 跳过；3 个 `node:test` 文件 37 通过 |
+| 测试 | `bun run test:all`：69 个 bun 文件 840 通过 / 1 跳过；3 个 `node:test` 文件 37 通过 |
 | 构建 | `typecheck`、`test:cloud`、`build`、`build:edge` 全过；产物 3.9 MB 级（不含 FFmpeg） |
 | 分发形态 | 绿色包：扩展 + 内置 FFmpeg + 桥脚本 + `一键安装.cmd` / `一键卸载.cmd` |
 
