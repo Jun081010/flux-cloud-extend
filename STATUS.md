@@ -1,6 +1,6 @@
 # 项目状态（FluxDown 云盘下载拦截扩展）
 
-最后更新：2026-11-20 · 对应版本 **0.1.47** · 仓库 https://github.com/Jun081010/flux-cloud-extend
+最后更新：2026-11-21 · 对应版本 **0.1.48** · 仓库 https://github.com/Jun081010/flux-cloud-extend
 
 这份文件是交接用的「现在到哪了」：已完成的能力、已知缺陷、架构关键点、取证方式、待办。
 设计与契约细节见 `PROJECT.md`，使用者文档见 `README.md`。
@@ -9,9 +9,9 @@
 
 | 项 | 值 |
 | --- | --- |
-| 最新发布 | v0.1.47（2026-11-20），Release 附件 `FluxDown-Cloud-Extension-0.1.47.zip` + `.zip.sha256` |
-| 分享包 SHA256 | `b5cfd861201143203110ee5850a1eeda6ecbba8e5c1755fb655b7455e06ac1f6`（60,941,233 B） |
-| 扩展版本 | `app/package.json` = manifest = 0.1.47（Edge / Chrome 两套 MV3） |
+| 最新发布 | v0.1.48（2026-11-21），分享包 `FluxDown-Cloud-Extension-0.1.48.zip`（60,943,089 B）+ `.zip.sha256` |
+| 分享包 SHA256 | `cacb9089143eb9a33bdcf73a864684ec248241d35a85057c542371aa9ef63f19`（60,943,089 B） |
+| 扩展版本 | `app/package.json` = manifest = 0.1.48（Edge / Chrome 两套 MV3） |
 | 仓库状态 | `main` 已含 2026-11-20 的源码工作区迁移与 STATUS 更新；最近两次提交的 CI 与 CodeQL 均 success；分支保护开启（禁强推 / 禁删除 / 需解决对话） |
 | 测试 | `bun run test:all`：68 个 bun 文件 836 通过 / 1 跳过；3 个 `node:test` 文件 37 通过 |
 | 构建 | `typecheck`、`test:cloud`、`build`、`build:edge` 全过；产物 3.9 MB 级（不含 FFmpeg） |
@@ -36,6 +36,7 @@
 | 0.1.45 | 11-20 10:57 | 音频轨下载修复（此前只有画面） |
 | 0.1.46 | 11-20 12:16 | CI / CodeQL、Bun 锁文件、一键卸载、FFmpeg 哈希与 `SHA256SUMS`、文档修正 |
 | 0.1.47 | 11-20 12:43 | 诊断页（扩展 ID 一键复制 + 失败归类）、安装日志、白名单回读校验、打包版本来源修复 |
+| 0.1.48 | 11-21 | 资源列表图片缩略图（懒加载 + 失败回退 + X 图片走 name=small） |
 
 ## 三、已完成能力
 

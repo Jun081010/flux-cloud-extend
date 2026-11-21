@@ -19,6 +19,7 @@ import { useT } from "@/ui/i18n";
 import { bestCandidateVariant } from "@/utils/media-candidates";
 import { isPreviewable, PreviewModal, type PreviewTarget } from "./PreviewModal";
 import { QualityPicker } from "./QualityPicker";
+import { ResourceThumb } from "./ResourceThumb";
 import { resourceDisplayName, variantLabel } from "./labels";
 import "./features.css";
 
@@ -370,7 +371,15 @@ export function ResourceList(props: Props): JSX.Element {
             checked={selected.has(key)}
             onChange={(e) => toggle(key, (e.currentTarget as HTMLInputElement).checked)}
           />
-          <Icon resourceType={r.type} size={18} />
+          {r.type === "image" ? (
+            <ResourceThumb
+              url={r.url}
+              name={name}
+              onOpen={() => setPreview({ url: r.url, title: name, type: r.type, mimeType: r.mimeType })}
+            />
+          ) : (
+            <Icon resourceType={r.type} size={18} />
+          )}
           <div class="fd-row-main">
             <div class="fd-row-title" title={`${name}\n${r.url}`}>
               {name}
