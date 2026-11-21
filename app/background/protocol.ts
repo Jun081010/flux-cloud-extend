@@ -87,7 +87,7 @@ export interface CandidateRow {
 }
 
 export interface ResourceRow {
-  resource: DetectedResource;
+  resource: Omit<DetectedResource, "cookies" | "headers">;
   ruleIds: string[];
 }
 

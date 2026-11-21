@@ -345,7 +345,14 @@ function withSourceBufferKinds(
 
 export function composeTabView(input: ViewModelInput): TabView {
   const { engine, elements } = input;
-  const key = (url: string) => engine.dedupeKey(url, input.pageUrl);
+  const keys = new Map<string, string>();
+  const key = (url: string) => {
+    const cached = keys.get(url);
+    if (cached !== undefined) return cached;
+    const normalized = engine.dedupeKey(url, input.pageUrl);
+    keys.set(url, normalized);
+    return normalized;
+  };
   // 真实元素在前：同分时保留真实元素（历史会话只承接真实元素已不再持有的证据）
   const evidenceElements = input.retiredElements.length > 0 ? [...elements, ...input.retiredElements] : elements;
   const resources = withSourceBufferKinds(input.resources, evidenceElements, key);
@@ -463,7 +470,8 @@ export function composeTabView(input: ViewModelInput): TabView {
       hiddenLowConfidence++;
       continue;
     }
-    files.push({ resource, ruleIds: resource.ruleIds ?? [] });
+    const { cookies: _cookies, headers: _headers, ...displayResource } = resource;
+    files.push({ resource: displayResource, ruleIds: resource.ruleIds ?? [] });
     addCount(resource.type, 1);
   }
 

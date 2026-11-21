@@ -22,23 +22,34 @@ const COALESCE_MS = 150;
 
 const subscribers = new Map<number, Set<Browser.runtime.Port>>();
 const timers = new Map<number, ReturnType<typeof setTimeout>>();
+const publishing = new Map<number, { pending: number; started: number; published: number }>();
 /** 已被关闭的 tab：不再为它刷新徽标。 */
 const closedTabs = new Set<number>();
 
 async function publish(tabId: number): Promise<void> {
   if (closedTabs.has(tabId)) return;
+  const state = publishing.get(tabId) ?? { pending: 0, started: 0, published: 0 };
+  publishing.set(tabId, state);
+  const sequence = ++state.started;
+  state.pending++;
   const ports = subscribers.get(tabId);
-  // 没有订阅者时只为徽标刷新：不计算 handoff（会触发 NMH capabilities 探测，可能反复拉起桌面端）。
-  const view = await buildTabView(tabId, { withHandoff: ports !== undefined });
-  void updateBadgeForTab(tabId, badgeCount(view));
-  if (!ports) return;
-  const push: TabViewPush = { type: "tabView", view };
-  for (const port of ports) {
-    try {
-      port.postMessage(push);
-    } catch {
-      ports.delete(port);
+  try {
+    // 没有订阅者时只为徽标刷新：不计算 handoff（会触发 NMH capabilities 探测，可能反复拉起桌面端）。
+    const view = await buildTabView(tabId, { withHandoff: ports !== undefined });
+    if (publishing.get(tabId) !== state || sequence <= state.published) return;
+    state.published = sequence;
+    void updateBadgeForTab(tabId, badgeCount(view));
+    if (!ports || ports !== subscribers.get(tabId)) return;
+    const push: TabViewPush = { type: "tabView", view };
+    for (const port of ports) {
+      try {
+        port.postMessage(push);
+      } catch {
+        unsubscribe(port, tabId);
+      }
     }
+  } finally {
+    if (--state.pending === 0 && publishing.get(tabId) === state) publishing.delete(tabId);
   }
 }
 
@@ -60,7 +71,7 @@ function scheduleAllKnown(): void {
 function isSubscribe(message: unknown): message is TabViewSubscribe {
   if (!message || typeof message !== "object" || !("subscribe" in message)) return false;
   const value = (message as { subscribe: unknown }).subscribe;
-  return value === "sender" || typeof value === "number";
+  return value === "sender" || (typeof value === "number" && Number.isSafeInteger(value) && value >= 0);
 }
 
 function unsubscribe(port: Browser.runtime.Port, tabId: number | null): void {
@@ -87,20 +98,25 @@ export function installPorts(): void {
     scheduleAllKnown();
   });
   // tab-state 自己的 onRemoved 负责清状态；这里只停止该 tab 的视图推送。
-  browser.tabs.onRemoved.addListener((tabId) => {
+  const closeTab = (tabId: number) => {
     closedTabs.add(tabId);
     clearTimeout(timers.get(tabId));
     timers.delete(tabId);
+    publishing.delete(tabId);
     subscribers.delete(tabId);
-  });
+  };
+  browser.tabs.onRemoved.addListener(closeTab);
+  browser.tabs.onReplaced.addListener((_addedTabId, removedTabId) => closeTab(removedTabId));
 
   browser.runtime.onConnect.addListener((port) => {
     if (port.name !== TAB_VIEW_PORT) return;
     let subscribed: number | null = null;
     port.onMessage.addListener((message: unknown) => {
       if (!isSubscribe(message)) return;
-      const tabId = message.subscribe === "sender" ? port.sender?.tab?.id : message.subscribe;
-      if (tabId === undefined || tabId < 0) return;
+      const senderTabId = port.sender?.tab?.id;
+      const tabId = message.subscribe === "sender" ? senderTabId : message.subscribe;
+      if (tabId === undefined || tabId < 0 || closedTabs.has(tabId)) return;
+      if (tabId !== senderTabId && !port.sender?.url?.startsWith(browser.runtime.getURL("/"))) return;
       unsubscribe(port, subscribed);
       subscribed = tabId;
       let ports = subscribers.get(tabId);

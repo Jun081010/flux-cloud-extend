@@ -1,5 +1,5 @@
 import type { JSX } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useMemo, useState } from "preact/hooks";
 import { Icon } from "@/ui/components/Icon";
 import { thumbnailableUrl } from "@/utils/thumb-url";
 
@@ -9,25 +9,16 @@ interface Props {
   onOpen?: () => void;
 }
 
-export function ResourceThumb({ url, name, onOpen }: Props): JSX.Element {
-  const src = thumbnailableUrl(url);
+function ThumbnailImage({ src }: { src: string | null }): JSX.Element {
   const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [url]);
-  const fallback = (
-    <span class="fd-thumb fd-thumb-fallback">
-      <Icon resourceType="image" size={18} />
-    </span>
-  );
   if (!src || failed) {
-    return onOpen ? (
-      <button type="button" class="fd-thumb-btn" title={name} aria-label={name} onClick={onOpen}>
-        {fallback}
-      </button>
-    ) : (
-      <span class="fd-thumb-btn">{fallback}</span>
+    return (
+      <span class="fd-thumb fd-thumb-fallback">
+        <Icon resourceType="image" size={18} />
+      </span>
     );
   }
-  const img = (
+  return (
     <img
       class="fd-thumb"
       src={src}
@@ -39,11 +30,16 @@ export function ResourceThumb({ url, name, onOpen }: Props): JSX.Element {
       onError={() => setFailed(true)}
     />
   );
+}
+
+export function ResourceThumb({ url, name, onOpen }: Props): JSX.Element {
+  const src = useMemo(() => thumbnailableUrl(url), [url]);
+  const image = <ThumbnailImage key={src} src={src} />;
   return onOpen ? (
     <button type="button" class="fd-thumb-btn" title={name} aria-label={name} onClick={onOpen}>
-      {img}
+      {image}
     </button>
   ) : (
-    <span class="fd-thumb-btn">{img}</span>
+    <span class="fd-thumb-btn">{image}</span>
   );
 }

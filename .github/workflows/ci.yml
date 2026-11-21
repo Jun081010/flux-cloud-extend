@@ -51,6 +51,13 @@ jobs:
       - name: LinkSwift patch test
         run: bun run test:cloud
 
+      - name: Baidu page bridge test
+        run: bun run test:baidu
+
+      - name: Release package smoke test (Windows PowerShell 5.1)
+        shell: powershell
+        run: ..\scripts\test-package-release.ps1
+
       - name: Build Edge (MV3)
         run: bun run build:edge
 
@@ -74,5 +81,12 @@ jobs:
             Write-Host "missing build output:"
             $missing | ForEach-Object { Write-Host "  - $_" }
             exit 1
+          }
+          $expectedVersion = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+          foreach ($manifestPath in @('.output/edge-mv3/manifest.json', '.output/chrome-mv3/manifest.json')) {
+            $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+            if ($manifest.manifest_version -ne 3 -or $manifest.version -ne $expectedVersion) {
+              throw "Unexpected manifest version in ${manifestPath}: MV$($manifest.manifest_version) $($manifest.version)"
+            }
           }
           Write-Host "build output verified."

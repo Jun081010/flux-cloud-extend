@@ -1,6 +1,6 @@
 # 项目状态（FluxDown 云盘下载拦截扩展）
 
-最后更新：2026-11-21 · 对应版本 **0.1.48** · 仓库 https://github.com/Jun081010/flux-cloud-extend
+最后更新：2026-11-21 · 对应版本 **0.1.49** · 仓库 https://github.com/Jun081010/flux-cloud-extend
 
 这份文件是交接用的「现在到哪了」：已完成的能力、已知缺陷、架构关键点、取证方式、待办。
 设计与契约细节见 `PROJECT.md`，使用者文档见 `README.md`。
@@ -9,19 +9,19 @@
 
 | 项 | 值 |
 | --- | --- |
-| 最新发布 | v0.1.48（2026-11-21），分享包 `FluxDown-Cloud-Extension-0.1.48.zip`（60,943,089 B）+ `.zip.sha256` |
-| 分享包 SHA256 | `cacb9089143eb9a33bdcf73a864684ec248241d35a85057c542371aa9ef63f19`（60,943,089 B） |
-| 扩展版本 | `app/package.json` = manifest = 0.1.48（Edge / Chrome 两套 MV3） |
-| 仓库状态 | `main` 已含 2026-11-20 的源码工作区迁移与 STATUS 更新；最近两次提交的 CI 与 CodeQL 均 success；分支保护开启（禁强推 / 禁删除 / 需解决对话） |
-| 测试 | `bun run test:all`：69 个 bun 文件 840 通过 / 1 跳过；3 个 `node:test` 文件 37 通过 |
-| 构建 | `typecheck`、`test:cloud`、`build`、`build:edge` 全过；产物 3.9 MB 级（不含 FFmpeg） |
+| 发布版本 | v0.1.49，分享包 `FluxDown-Cloud-Extension-0.1.49.zip`（60,943,589 B）+ `.zip.sha256` |
+| 分享包 SHA256 | `9081553dacbe0ef046c6ceee6137843ff1e1bdbdc764344b1b6d9d60ea44f258` |
+| 扩展版本 | `app/package.json` = manifest = 0.1.49（Edge / Chrome 两套 MV3） |
+| 自动验证 | GitHub Actions 运行类型检查、Bun / Node 测试、百度消息桥测试、打包夹具测试与双浏览器构建。 |
+| 本地验证 | `bun run test:all` 共 846 项 Bun 测试通过、1 项跳过，另有 37 项 Node 测试通过。 |
+| 构建 | `typecheck`、`test:cloud`、`test:baidu`、`build`、`build:edge` 以及 Windows PowerShell 5.1 打包验证通过。 |
 | 分发形态 | 绿色包：扩展 + 内置 FFmpeg + 桥脚本 + `一键安装.cmd` / `一键卸载.cmd` |
 
 本地目录（本机）：
 
 | 用途 | 路径 |
 | --- | --- |
-| Codex 工作区 / 分享包归档 | `D:\fluxdown-cloud-extenstion`（0.1.41–0.1.47 zip + `.sha256` + 本文件） |
+| Codex 工作区 / 分享包归档 | `D:\fluxdown-cloud-extenstion`（0.1.41–0.1.49 分享包与状态文档） |
 | 源码 | `D:\fluxdown-cloud-extenstion\source`（非 git 仓库；`E:\codex\fluxdown-cloud-extension` 为迁移前旧副本，仅作备份） |
 | 临时克隆 | `E:\codex\tmp\flux-cloud-extend-push-*\repo`（`main` 镜像，仅用于提交/推送） |
 
@@ -37,6 +37,7 @@
 | 0.1.46 | 11-20 12:16 | CI / CodeQL、Bun 锁文件、一键卸载、FFmpeg 哈希与 `SHA256SUMS`、文档修正 |
 | 0.1.47 | 11-20 12:43 | 诊断页（扩展 ID 一键复制 + 失败归类）、安装日志、白名单回读校验、打包版本来源修复 |
 | 0.1.48 | 11-21 | 资源列表图片缩略图（懒加载 + 失败回退 + X 图片走 name=small） |
+| 0.1.49 | 11-21 | 资源面板推送顺序与重连修复、缩略图回归测试、分享包版本与完整性校验 |
 
 ## 三、已完成能力
 
@@ -96,9 +97,9 @@ FluxDown 桌面端（任务队列 / 下载 / 调用 FFmpeg 合并音视频）
 - **装完必须重载扩展**：更新后在 `edge://extensions/` 点一次「重新加载」，否则 Service Worker 还是旧脚本。
 - **FFmpeg 的 PATH 是进程启动时继承的**：改 PATH 后要完全退出 FluxDown（托盘退出）再启动；不行就手动指定路径。
 - **分享包必须同时有 `.zip.sha256`**：校验和与 GitHub Release 的 `digest` 应当一致。
-- **打包版本取自构建产物 manifest**：`package-release.ps1` 会校验 Edge/Chrome 版本一致，不再读 `.test-artifacts` 里的旧值。
+- **打包版本校验**：`package-release.ps1` 要求 Edge、Chrome 的 manifest 与 `app/package.json` 版本一致，显式指定的 `-Version` 也必须相同。
 - **PowerShell 5.1 限制**：含中文的 `.ps1` 必须 UTF-8 带 BOM；纯 ASCII 脚本（如 `package-release.ps1`）保持 ASCII；`powershell -Command` 会吞 `$`，统一用 `-File`。
-- **Bun / Node 双轨测试**：`bun run test` 排除三个使用 `registerHooks` 的文件，由 `bun run test:node`（Node 20+）单独跑；`test:all` 一次跑完。
+- **Bun / Node 双轨测试**：`bun run test` 排除三个使用 `registerHooks` 的文件，由 `bun run test:node`（Node 22.18+）单独跑。`test:all` 运行两套测试。
 - **白名单「写成功但没落盘」**：0.1.47 起安装脚本会回读 `allowed_origins`，不匹配直接失败并写日志。
 
 ## 六、已知缺陷与限制
@@ -152,7 +153,7 @@ bun run build
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-release.ps1
 ```
 
-产物默认落在桌面：`FluxDown-Cloud-Extension-<版本>.zip`、`.zip.sha256`，并校验 FFmpeg 固定哈希与 12 项包内文件。
+产物默认落在桌面，包含 `FluxDown-Cloud-Extension-<版本>.zip` 与 `.zip.sha256`。脚本先校验暂存的 FFmpeg 和归档中的必需文件，再替换同名成品。
 
 源码目录 `D:\fluxdown-cloud-extenstion\source` **不是 git 仓库**，历史只在 GitHub 与临时克隆里；提交前先把改动同步进克隆。
 

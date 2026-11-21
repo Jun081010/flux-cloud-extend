@@ -1,12 +1,12 @@
 {
   "name": "flux-down-extension",
   "description": "FluxDown browser extension - intercept downloads and send to FluxDown app",
-  "version": "0.1.48",
+  "version": "0.1.49",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.5",
   "engines": {
-    "node": ">=20",
+    "node": ">=22.18.0",
     "bun": ">=1.4.5"
   },
   "scripts": {
@@ -23,6 +23,7 @@
     "test:node": "node --test background/cloud-bridge.test.ts background/cloud-downloads.test.ts background/download-urls-audio.test.ts",
     "test:all": "bun run test && bun run test:node",
     "test:cloud": "node ../scripts/test-linkswift-patch.mjs",
+    "test:baidu": "node ../scripts/test-baidu-page.mjs",
     "typecheck": "wxt prepare && tsc --noEmit"
   },
   "devDependencies": {

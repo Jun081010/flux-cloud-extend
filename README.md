@@ -36,7 +36,7 @@
 
 ## 构建
 
-前置条件：Bun 1.4.5（`app/package.json` 的 `packageManager` 已固定，依赖唯一锁文件为 `app/bun.lock`）与 Node.js 20+（`test:cloud`、`test:node` 与 WXT 工具链走 Node 入口）。构建脚本 `prebuild` 会自动运行 `scripts/patch-linkswift.mjs`。
+前置条件：Bun 1.4.5（`app/package.json` 固定版本，依赖锁文件为 `app/bun.lock`）与 Node.js 22.18+。`test:node` 使用 `registerHooks` 并直接运行 TypeScript。构建脚本 `prebuild` 会自动运行 `scripts/patch-linkswift.mjs`。
 
 ```powershell
 cd <仓库根目录>\app
@@ -216,6 +216,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-hos
 cd <仓库根目录>\app
 bun install --frozen-lockfile
 bun run test:cloud
+bun run test:baidu
 bun run typecheck
 bun run test:all
 bun run build:edge
@@ -227,7 +228,9 @@ bun run build
 测试分成两批，`bun run test:all` 会依次跑完：
 
 - `bun run test`：`bun:test` 用例，开机即用 `--isolate` 隔离每个文件的全局对象。`cloud-bridge` / `cloud-downloads` / `download-urls-audio` 三个文件用 `node:test` + `node:module` 的 `registerHooks`，Bun 未实现该 API，因此从这批里排除。
-- `bun run test:node`：上面三个文件，需要 Node 20+（本机 Node 26 验证通过，37 个用例）。
+- `bun run test:node`：运行上述三个文件。
+- `bun run test:baidu`：用本地夹具验证百度页面消息桥，包括列目录、下载错误提示和无效请求。
+- `powershell -NoProfile -File .\scripts\test-package-release.ps1`（仓库根目录）：用临时夹具验证版本拒绝、压缩包校验和成品替换。
 - `app/utils/filename.test.ts` 里与 FluxDown 引擎共享的用例表位于 `native/engine/src/naming/fixtures/content_disposition.json`，该文件不随本仓库分发；缺失时这组用例标记为 `skip`，其余文件名用例照常执行。
 
 仍需在目标机器上执行：登录网盘后真实推送任务并核对 FluxDown 任务列表。安装脚本可先用 `-WhatIf` 预览；实际注册、浏览器加载与扩展 ID 获取需按上文步骤单独验证。

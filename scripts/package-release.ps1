@@ -47,29 +47,35 @@ foreach ($build in @($edgeBuild, $chromeBuild)) {
     }
 }
 
-# The manifest is the single source of truth for what is inside the zip.
-# A stale name here is how a 0.1.45 archive ends up labelled 0.1.46.
 $manifestVersions = @{}
 foreach ($build in @($edgeBuild, $chromeBuild)) {
     $manifestPath = Join-Path $build 'manifest.json'
     try {
-        $manifestVersions[$build] = (Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json).version
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
     }
     catch {
-        throw "cannot read version from $manifestPath : $($_.Exception.Message)"
+        throw "cannot read manifest $manifestPath : $($_.Exception.Message)"
     }
+    if ($manifest.manifest_version -ne 3) {
+        throw "expected an MV3 manifest: $manifestPath"
+    }
+    $manifestVersions[$build] = $manifest.version
 }
 $buildVersion = $manifestVersions[$edgeBuild]
-if ([string]::IsNullOrWhiteSpace($buildVersion)) {
-    throw "edge build has no version in $edgeBuild\manifest.json"
+if ($buildVersion -notmatch '\A[0-9]+(?:\.[0-9]+){2,3}\z') {
+    throw "edge build has an invalid version in $edgeBuild\manifest.json"
 }
 if ($manifestVersions[$chromeBuild] -ne $buildVersion) {
     throw ("edge/chrome build version mismatch: edge={0} chrome={1}" -f $buildVersion, $manifestVersions[$chromeBuild])
 }
+$sourceVersion = (Get-Content -LiteralPath (Join-Path $repoRoot 'app\package.json') -Raw | ConvertFrom-Json).version
+if ($sourceVersion -ne $buildVersion) {
+    throw "source/build version mismatch: source=$sourceVersion build=$buildVersion. Rebuild both browsers."
+}
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $Version = $buildVersion
 }
-elseif ($Version -notlike "*$buildVersion*") {
+elseif ($Version -ne $buildVersion) {
     throw ("-Version '{0}' does not match built manifest version '{1}'. Rebuild or fix -Version." -f $Version, $buildVersion)
 }
 
@@ -98,172 +104,159 @@ $ffmpegHashes = [ordered]@{
 
 $packageName = "FluxDown-Cloud-Extension-$Version"
 $stagingRoot = Join-Path $env:TEMP $packageName
-if (Test-Path -LiteralPath $stagingRoot) {
-    $resolvedStaging = [System.IO.Path]::GetFullPath($stagingRoot)
-    $resolvedTemp = [System.IO.Path]::GetFullPath($env:TEMP)
-    if (-not $resolvedStaging.StartsWith($resolvedTemp, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "refusing to clean a staging dir outside TEMP: $resolvedStaging"
-    }
-    Remove-Item -LiteralPath $stagingRoot -Recurse -Force
-}
-
-New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
-New-Item -ItemType Directory -Path (Join-Path $stagingRoot 'extension') -Force | Out-Null
-New-Item -ItemType Directory -Path (Join-Path $stagingRoot 'scripts') -Force | Out-Null
-
-Write-Host "[INFO] staging: $stagingRoot"
-Copy-Item -LiteralPath $edgeBuild -Destination (Join-Path $stagingRoot 'extension\edge-mv3') -Recurse -Force
-Copy-Item -LiteralPath $chromeBuild -Destination (Join-Path $stagingRoot 'extension\chrome-mv3') -Recurse -Force
-
-foreach ($file in @('Get-ExtensionId.ps1', 'install-native-host.ps1', 'setup-for-friend.ps1', 'reinstall-native-host.ps1')) {
-    $source = Join-Path $scriptDir $file
-    if (Test-Path -LiteralPath $source -PathType Leaf) {
-        Copy-Item -LiteralPath $source -Destination (Join-Path $stagingRoot "scripts\$file") -Force
+$requiredSources = @(
+    'LICENSE',
+    'THIRD_PARTY_NOTICES.md',
+    'scripts\Get-ExtensionId.ps1',
+    'scripts\install-native-host.ps1',
+    'scripts\setup-for-friend.ps1',
+    'scripts\reinstall-native-host.ps1',
+    'scripts\one-click.ps1',
+    'scripts\uninstall.ps1',
+    'scripts\release-launch.cmd',
+    'scripts\release-uninstall.cmd',
+    'scripts\release-readme-template.md',
+    'tools\ffmpeg\ffmpeg.exe',
+    'tools\ffmpeg\ffprobe.exe'
+)
+foreach ($required in $requiredSources) {
+    if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $required) -PathType Leaf)) {
+        throw "missing release input: $required"
     }
 }
-
-# One-click installer: the .ps1 must ship as UTF-8 WITH BOM because Windows
-# PowerShell 5.1 otherwise decodes the Chinese strings as ANSI and prints
-# mojibake (or fails to parse them).
-$oneClickSource = Join-Path $scriptDir 'one-click.ps1'
-if (Test-Path -LiteralPath $oneClickSource -PathType Leaf) {
-    $oneClickText = Get-Content -LiteralPath $oneClickSource -Raw -Encoding UTF8
-    [System.IO.File]::WriteAllText(
-        (Join-Path $stagingRoot 'scripts\one-click.ps1'),
-        $oneClickText,
-        (New-Object System.Text.UTF8Encoding $true))
+$tempRoot = [System.IO.Path]::GetFullPath($env:TEMP)
+$stagingRoot = [System.IO.Path]::GetFullPath($stagingRoot + '-' + [guid]::NewGuid().ToString('N'))
+if ((Split-Path -Parent $stagingRoot).TrimEnd('\') -ne $tempRoot.TrimEnd('\')) {
+    throw "Staging path is outside TEMP: $stagingRoot"
 }
 
-# Uninstaller: same BOM requirement as the installer.
-$uninstallSource = Join-Path $scriptDir 'uninstall.ps1'
-if (Test-Path -LiteralPath $uninstallSource -PathType Leaf) {
-    $uninstallText = Get-Content -LiteralPath $uninstallSource -Raw -Encoding UTF8
-    [System.IO.File]::WriteAllText(
-        (Join-Path $stagingRoot 'scripts\uninstall.ps1'),
-        $uninstallText,
-        (New-Object System.Text.UTF8Encoding $true))
-}
-else {
-    throw "missing uninstaller: $uninstallSource"
-}
+try {
+    New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $stagingRoot 'extension') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $stagingRoot 'scripts') -Force | Out-Null
 
-# Root launcher. Built from code points so this script stays pure ASCII.
-$launcherSource = Join-Path $scriptDir 'release-launch.cmd'
-if (Test-Path -LiteralPath $launcherSource -PathType Leaf) {
-    $launcherName = -join ([char]0x4E00, [char]0x952E, [char]0x5B89, [char]0x88C5)
-    Copy-Item -LiteralPath $launcherSource -Destination (Join-Path $stagingRoot ($launcherName + '.cmd')) -Force
-}
+    Write-Host "[INFO] staging: $stagingRoot"
+    Copy-Item -LiteralPath $edgeBuild -Destination (Join-Path $stagingRoot 'extension\edge-mv3') -Recurse -Force
+    Copy-Item -LiteralPath $chromeBuild -Destination (Join-Path $stagingRoot 'extension\chrome-mv3') -Recurse -Force
 
-$uninstallerSource = Join-Path $scriptDir 'release-uninstall.cmd'
-if (Test-Path -LiteralPath $uninstallerSource -PathType Leaf) {
-    $uninstallerName = -join ([char]0x4E00, [char]0x952E, [char]0x5378, [char]0x8F7D)
-    Copy-Item -LiteralPath $uninstallerSource -Destination (Join-Path $stagingRoot ($uninstallerName + '.cmd')) -Force
-}
-else {
-    throw "missing uninstaller launcher: $uninstallerSource"
-}
-
-# Bundled FFmpeg (used by the FluxDown engine to mux DASH audio/video).
-$ffmpegSource = Join-Path $repoRoot 'tools\ffmpeg'
-if (Test-Path -LiteralPath $ffmpegSource -PathType Container) {
-    foreach ($name in $ffmpegHashes.Keys) {
-        $binary = Join-Path $ffmpegSource $name
-        if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) {
-            throw "bundled FFmpeg missing: $binary"
-        }
+    foreach ($file in @('Get-ExtensionId.ps1', 'install-native-host.ps1', 'setup-for-friend.ps1', 'reinstall-native-host.ps1')) {
+        Copy-Item -LiteralPath (Join-Path $scriptDir $file) -Destination (Join-Path $stagingRoot "scripts\$file") -Force
     }
 
-    if (-not $SkipFfmpegCheck) {
-        foreach ($name in $ffmpegHashes.Keys) {
-            $actual = (Get-FileHash -LiteralPath (Join-Path $ffmpegSource $name) -Algorithm SHA256).Hash
-            if ($actual -ne $ffmpegHashes[$name]) {
-                throw ("FFmpeg hash mismatch for {0}`n  expected: {1}`n  actual:   {2}`nRefusing to package. Verify the new binary first, then update `$ffmpegHashes in this script." -f $name, $ffmpegHashes[$name], $actual)
-            }
-        }
-        Write-Host "[INFO] FFmpeg binaries match the pinned SHA-256 values."
-    }
-    else {
-        Write-Warning 'SkipFfmpegCheck set: packaging FFmpeg without verifying the pinned hashes.'
+    # One-click installer: the .ps1 must ship as UTF-8 WITH BOM because Windows
+    # PowerShell 5.1 otherwise decodes the Chinese strings as ANSI and prints
+    # mojibake (or fails to parse them).
+    foreach ($file in @('one-click.ps1', 'uninstall.ps1')) {
+        $text = Get-Content -LiteralPath (Join-Path $scriptDir $file) -Raw -Encoding UTF8
+        [System.IO.File]::WriteAllText(
+            (Join-Path $stagingRoot "scripts\$file"),
+            $text,
+            (New-Object System.Text.UTF8Encoding $true))
     }
 
+    # Root launcher. Built from code points so this script stays pure ASCII.
+    $launcherName = (-join ([char]0x4E00, [char]0x952E, [char]0x5B89, [char]0x88C5)) + '.cmd'
+    $uninstallerName = (-join ([char]0x4E00, [char]0x952E, [char]0x5378, [char]0x8F7D)) + '.cmd'
+    Copy-Item -LiteralPath (Join-Path $scriptDir 'release-launch.cmd') -Destination (Join-Path $stagingRoot $launcherName) -Force
+    Copy-Item -LiteralPath (Join-Path $scriptDir 'release-uninstall.cmd') -Destination (Join-Path $stagingRoot $uninstallerName) -Force
+
+    # Bundled FFmpeg (used by the FluxDown engine to mux DASH audio/video).
+    $ffmpegSource = Join-Path $repoRoot 'tools\ffmpeg'
     $ffmpegTarget = Join-Path $stagingRoot 'tools\ffmpeg'
     New-Item -ItemType Directory -Path $ffmpegTarget -Force | Out-Null
-    Copy-Item -Path (Join-Path $ffmpegSource '*') -Destination $ffmpegTarget -Recurse -Force
-
-    # Friends can check the shipped binaries with: certutil -hashfile ffmpeg.exe SHA256
-    $sumLines = @()
-    foreach ($name in @('ffmpeg.exe', 'ffprobe.exe')) {
-        $hash = (Get-FileHash -LiteralPath (Join-Path $ffmpegTarget $name) -Algorithm SHA256).Hash.ToLowerInvariant()
-        $sumLines += "$hash  $name"
+    if ($SkipFfmpegCheck) {
+        Write-Warning 'SkipFfmpegCheck set: packaging FFmpeg without verifying the pinned hashes.'
+    }
+    $sumLines = foreach ($name in $ffmpegHashes.Keys) {
+        $packedBinary = Join-Path $ffmpegTarget $name
+        Copy-Item -LiteralPath (Join-Path $ffmpegSource $name) -Destination $packedBinary
+        $hash = (Get-FileHash -LiteralPath $packedBinary -Algorithm SHA256).Hash
+        if (-not $SkipFfmpegCheck -and $hash -ne $ffmpegHashes[$name]) {
+            throw ("FFmpeg hash mismatch for {0}`n  expected: {1}`n  actual:   {2}" -f $name, $ffmpegHashes[$name], $hash)
+        }
+        "{0}  {1}" -f $hash.ToLowerInvariant(), $name
+    }
+    $ffmpegReadme = Join-Path $ffmpegSource 'README.txt'
+    if (Test-Path -LiteralPath $ffmpegReadme -PathType Leaf) {
+        Copy-Item -LiteralPath $ffmpegReadme -Destination $ffmpegTarget
     }
     [System.IO.File]::WriteAllLines(
         (Join-Path $ffmpegTarget 'SHA256SUMS.txt'),
-        $sumLines,
+        [string[]]$sumLines,
         (New-Object System.Text.UTF8Encoding $false))
-}
 
-foreach ($file in @('LICENSE', 'THIRD_PARTY_NOTICES.md')) {
-    $source = Join-Path $repoRoot $file
-    if (Test-Path -LiteralPath $source -PathType Leaf) {
-        Copy-Item -LiteralPath $source -Destination (Join-Path $stagingRoot $file) -Force
+    foreach ($file in @('LICENSE', 'THIRD_PARTY_NOTICES.md')) {
+        Copy-Item -LiteralPath (Join-Path $repoRoot $file) -Destination $stagingRoot
+    }
+
+    $readmeSource = Join-Path $scriptDir 'release-readme-template.md'
+    $content = (Get-Content -LiteralPath $readmeSource -Raw -Encoding UTF8).Replace('{{VERSION}}', $Version)
+    [System.IO.File]::WriteAllText((Join-Path $stagingRoot $readmeName), $content, (New-Object System.Text.UTF8Encoding $false))
+
+    if (-not (Test-Path -LiteralPath $DesktopDir -PathType Container)) {
+        New-Item -ItemType Directory -Path $DesktopDir -Force | Out-Null
+    }
+    $zipPath = Join-Path $DesktopDir "$packageName.zip"
+    $shaPath = "$zipPath.sha256"
+    $checkFiles = @(
+        'LICENSE',
+        'THIRD_PARTY_NOTICES.md',
+        'extension\edge-mv3\manifest.json',
+        'extension\edge-mv3\background.js',
+        'extension\chrome-mv3\manifest.json',
+        'extension\chrome-mv3\background.js',
+        'scripts\setup-for-friend.ps1',
+        'scripts\Get-ExtensionId.ps1',
+        'scripts\install-native-host.ps1',
+        'scripts\reinstall-native-host.ps1',
+        'scripts\one-click.ps1',
+        'scripts\uninstall.ps1',
+        $launcherName,
+        $uninstallerName,
+        'tools\ffmpeg\ffmpeg.exe',
+        'tools\ffmpeg\ffprobe.exe',
+        'tools\ffmpeg\SHA256SUMS.txt',
+        $readmeName
+    )
+    $tempZip = Join-Path $DesktopDir ("{0}-{1}.zip" -f $packageName, [guid]::NewGuid().ToString('N'))
+    $tempSha = "$tempZip.sha256"
+    try {
+        $stagedPaths = @(Get-ChildItem -LiteralPath $stagingRoot | ForEach-Object FullName)
+        Compress-Archive -LiteralPath $stagedPaths -DestinationPath $tempZip -CompressionLevel Optimal
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $archive = [System.IO.Compression.ZipFile]::OpenRead($tempZip)
+        try {
+            $entryNames = @($archive.Entries | Where-Object Length -gt 0 | ForEach-Object { $_.FullName.Replace('\', '/') })
+            foreach ($relative in $checkFiles) {
+                if ($entryNames -notcontains $relative.Replace('\', '/')) { throw "archive missing or empty: $relative" }
+            }
+        }
+        finally {
+            $archive.Dispose()
+        }
+
+        $zipHash = (Get-FileHash -LiteralPath $tempZip -Algorithm SHA256).Hash.ToLowerInvariant()
+        [System.IO.File]::WriteAllText(
+            $tempSha,
+            ("{0}  {1}`r`n" -f $zipHash, "$packageName.zip"),
+            (New-Object System.Text.UTF8Encoding $false))
+        Move-Item -LiteralPath $tempZip -Destination $zipPath -Force
+        Move-Item -LiteralPath $tempSha -Destination $shaPath -Force
+    }
+    finally {
+        foreach ($temporary in @($tempZip, $tempSha)) {
+            [System.IO.File]::Delete([System.IO.Path]::GetFullPath($temporary))
+        }
+    }
+
+    $zipItem = Get-Item -LiteralPath $zipPath
+    Write-Host ("[INFO] package verified: {0}" -f $zipItem.FullName) -ForegroundColor Green
+    Write-Host ("[INFO] size: {0:N1} MB" -f ($zipItem.Length / 1MB))
+    Write-Host ("[INFO] sha256: {0}" -f $zipHash)
+    Write-Host ("[INFO] checksum file: {0}" -f $shaPath)
+}
+finally {
+    if (Test-Path -LiteralPath $stagingRoot -PathType Container) {
+        Remove-Item -LiteralPath $stagingRoot -Recurse -Force
     }
 }
-
-$readmeSource = Join-Path $scriptDir 'release-readme-template.md'
-if (Test-Path -LiteralPath $readmeSource -PathType Leaf) {
-    $content = Get-Content -LiteralPath $readmeSource -Raw -Encoding UTF8
-    $content = $content.Replace('{{VERSION}}', $Version)
-    [System.IO.File]::WriteAllText((Join-Path $stagingRoot $readmeName), $content, (New-Object System.Text.UTF8Encoding $false))
-}
-
-if (-not (Test-Path -LiteralPath $DesktopDir -PathType Container)) {
-    New-Item -ItemType Directory -Path $DesktopDir -Force | Out-Null
-}
-$zipPath = Join-Path $DesktopDir "$packageName.zip"
-if (Test-Path -LiteralPath $zipPath -PathType Leaf) {
-    Remove-Item -LiteralPath $zipPath -Force
-}
-
-Compress-Archive -Path (Join-Path $stagingRoot '*') -DestinationPath $zipPath -CompressionLevel Optimal
-
-$zipItem = Get-Item -LiteralPath $zipPath
-$zipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
-$shaPath = "$zipPath.sha256"
-[System.IO.File]::WriteAllText(
-    $shaPath,
-    ("{0}  {1}`r`n" -f $zipHash, $zipItem.Name),
-    (New-Object System.Text.UTF8Encoding $false))
-
-Write-Host ""
-Write-Host ("[INFO] package created: {0}" -f $zipItem.FullName) -ForegroundColor Green
-Write-Host ("[INFO] size: {0:N1} MB" -f ($zipItem.Length / 1MB))
-Write-Host ("[INFO] sha256: {0}" -f $zipHash)
-Write-Host ("[INFO] checksum file: {0}" -f $shaPath)
-Write-Host "[INFO] staging folder kept for inspection: $stagingRoot"
-
-$verify = Join-Path $env:TEMP ("$packageName-verify")
-if (Test-Path -LiteralPath $verify) { Remove-Item -LiteralPath $verify -Recurse -Force }
-Expand-Archive -LiteralPath $zipPath -DestinationPath $verify -Force
-$checkFiles = @(
-    'extension\edge-mv3\manifest.json',
-    'extension\chrome-mv3\manifest.json',
-    'scripts\setup-for-friend.ps1',
-    'scripts\Get-ExtensionId.ps1',
-    'scripts\one-click.ps1',
-    'scripts\uninstall.ps1',
-    (-join ([char]0x4E00, [char]0x952E, [char]0x5B89, [char]0x88C5) + '.cmd'),
-    (-join ([char]0x4E00, [char]0x952E, [char]0x5378, [char]0x8F7D) + '.cmd'),
-    'tools\ffmpeg\ffmpeg.exe',
-    'tools\ffmpeg\ffprobe.exe',
-    'tools\ffmpeg\SHA256SUMS.txt',
-    $readmeName
-)
-Write-Host ""
-Write-Host "[INFO] verifying archive contents:"
-foreach ($relative in $checkFiles) {
-    $present = Test-Path -LiteralPath (Join-Path $verify $relative)
-    $mark = if ($present) { 'OK  ' } else { 'MISS' }
-    Write-Host ("  {0} {1}" -f $mark, $relative)
-    if (-not $present) { throw "archive missing: $relative" }
-}
-Write-Host "[INFO] archive verified." -ForegroundColor Green

@@ -40,7 +40,7 @@ export function useTabView(tabId: number | "sender" | null): Signal<TabView | nu
       port = opened;
       opened.onMessage.addListener((msg: unknown) => {
         const push = msg as TabViewPush;
-        if (push?.type === "tabView") view.value = push.view;
+        if (port === opened && push?.type === "tabView") view.value = push.view;
       });
       opened.onDisconnect.addListener(() => {
         // 被动断开（后台重启、扩展重载等）的原因在 runtime.lastError；不读会被记为 Unchecked 错误。
@@ -50,7 +50,12 @@ export function useTabView(tabId: number | "sender" | null): Signal<TabView | nu
         if (!disposed) timer = setTimeout(connect, RECONNECT_MS);
       });
       const sub: TabViewSubscribe = { subscribe: tabId };
-      opened.postMessage(sub);
+      try {
+        opened.postMessage(sub);
+      } catch {
+        disconnect();
+        if (!disposed) timer = setTimeout(connect, RECONNECT_MS);
+      }
     };
     const disconnect = () => {
       clearTimeout(timer);

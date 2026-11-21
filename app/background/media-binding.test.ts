@@ -233,6 +233,29 @@ describe("徽标数", () => {
   });
 });
 
+test("资源列表保留下载 ID 和预览地址，原始请求头留在后台", () => {
+  const resource: DetectedResource = {
+    id: "image-resource",
+    url: "https://example.com/image.png",
+    filename: "image.png",
+    type: "image",
+    size: 10,
+    detectedBy: "webRequest",
+    detectedAt: 1,
+    tabId: 1,
+    pageUrl: PAGE_URL,
+    confidence: "high",
+    cookies: "fixture-cookie=value",
+    headers: { Authorization: "fixture-token" },
+  };
+  const [row] = composeTabView(input({ resources: [resource] })).files;
+  expect(row?.resource).toMatchObject({ id: resource.id, url: resource.url, type: "image" });
+  expect(row.resource).not.toHaveProperty("cookies");
+  expect(row.resource).not.toHaveProperty("headers");
+  expect(resource.headers).toEqual({ Authorization: "fixture-token" });
+  expect(resource.cookies).toBe("fixture-cookie=value");
+});
+
 describe("bindCandidates", () => {
   test("同分时取 rank 更高的元素", () => {
     const view = composeTabView(input({ manifests, elements: [] }));
