@@ -14,17 +14,23 @@ execFileSync(process.execPath, ["--check", pageFile], { stdio: "pipe" });
 
 const ORIGIN = "https://pan.baidu.com";
 
-function createHarness({ gmXhrBehavior = "error" } = {}) {
+function createHarness({ gmXhrBehavior = "error", transferResponse, savedFile, pdfTransfer = false, fileId = 225769319988647 } = {}) {
   const listeners = [];
   const posted = [];
   const gmValues = new Map();
+  const requests = [];
 
   const fakeFile = {
-    fs_id: 225769319988647,
+    fs_id: fileId,
     server_filename: "logisim_x64.zip",
     size: 235492201,
     isdir: 0,
   };
+  if (pdfTransfer) {
+    fakeFile.server_filename = "sample.pdf";
+  }
+  const transferredFile = { ...fakeFile, fs_id: 1702, dlink: "https://pan.baidu.com/fixture-pdf" };
+  let transferred = false;
   const shareContext = {
     pageKind: "single",
     shareId: "40858708293",
@@ -69,6 +75,29 @@ function createHarness({ gmXhrBehavior = "error" } = {}) {
     },
     GM_setValue(key, value) { gmValues.set(key, value); },
     GM_xmlhttpRequest(options) {
+      const url = new URL(options.url);
+      requests.push(url.pathname);
+      if (pdfTransfer && url.pathname === "/share/transfer") {
+        const ids = JSON.parse(new URLSearchParams(options.data).get("fsidlist"));
+        transferred = ids.length === 1 && ids[0] === fakeFile.fs_id;
+        queueMicrotask(() => options.onload?.({ response: { errno: transferred ? 0 : 2 } }));
+        return { abort() {} };
+      }
+      const listedFile = transferred ? transferredFile : savedFile;
+      if (transferResponse !== undefined || savedFile || pdfTransfer) {
+        const response = url.pathname === "/oauth/2.0/authorize"
+          ? { finalUrl: "https://openapi.baidu.com/oauth/2.0/login_success#access_token=fixture-token" }
+          : url.pathname === "/rest/2.0/xpan/file"
+            ? { response: { errno: 0, list: listedFile ? [listedFile] : [] } }
+            : url.pathname === "/share/transfer"
+              ? { response: transferResponse }
+              : url.pathname === "/rest/2.0/xpan/multimedia" && listedFile
+                ? { response: { errno: 0, list: [listedFile] } }
+                : null;
+        if (!response) throw new Error("Unexpected test request: " + url.pathname);
+        queueMicrotask(() => options.onload?.(response));
+        return { abort() {} };
+      }
       if (gmXhrBehavior === "error") {
         queueMicrotask(() => options.onerror?.(new Error("network disabled in test")));
         return { abort() {} };
@@ -118,7 +147,7 @@ function createHarness({ gmXhrBehavior = "error" } = {}) {
   };
   const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
   const responses = () => posted.filter((entry) => entry.message?.__fluxdownBaiduPageResponse === 1);
-  return { posted, responses, dispatch, tick, fakeWindow };
+  return { posted, responses, dispatch, tick, fakeWindow, requests };
 }
 
 async function testList() {
@@ -171,6 +200,52 @@ async function testInvalidRequestsIgnored() {
   console.log("  invalid requests ignored: OK");
 }
 
+async function testTransferRejected() {
+  const harness = createHarness({ transferResponse: { errno: 2 } });
+  harness.dispatch({ __fluxdownBaiduPageRequest: 1, requestId: "req-transfer", op: "download", id: "225769319988647" });
+  await harness.tick();
+  const replies = harness.responses();
+  assert.equal(replies.length, 1);
+  const result = replies[0].message.result;
+  assert.equal(result.ok, false);
+  assert.match(result.error, /错误码 2/);
+  assert.match(result.error, /保存到网盘.*\/FluxDown.*重试/);
+  assert.equal(result.url, undefined);
+  assert.deepEqual(harness.requests, ["/oauth/2.0/authorize", "/rest/2.0/xpan/file", "/share/transfer"]);
+  console.log("  denied transfer preserves code and offers native recovery: OK");
+}
+
+async function testManuallySavedFile() {
+  const savedFile = {
+    fs_id: 1701,
+    server_filename: "logisim_x64.zip",
+    size: 235492201,
+    dlink: "https://pan.baidu.com/fixture-download",
+  };
+  const harness = createHarness({ savedFile });
+  const result = await harness.fakeWindow.__FLUXDOWN_BAIDU_PAGE__.download("225769319988647");
+  assert.equal(result.ok, true);
+  assert.equal(result.filename, savedFile.server_filename);
+  assert.equal(new URL(result.url).pathname, "/fixture-download");
+  assert.deepEqual(harness.requests, ["/oauth/2.0/authorize", "/rest/2.0/xpan/file", "/rest/2.0/xpan/multimedia"]);
+  console.log("  existing file in /FluxDown can be submitted without repeating the transfer: OK");
+}
+
+async function testPdfTransferPreservesFileIdType() {
+  for (const fileId of [225769319988647, "9007199254740993"]) {
+    const harness = createHarness({ pdfTransfer: true, fileId });
+    const result = await harness.fakeWindow.__FLUXDOWN_BAIDU_PAGE__.download(String(fileId));
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.filename, "sample.pdf");
+    assert.equal(new URL(result.url).pathname, "/fixture-pdf");
+    assert.deepEqual(harness.requests, [
+      "/oauth/2.0/authorize", "/rest/2.0/xpan/file", "/share/transfer",
+      "/rest/2.0/xpan/file", "/rest/2.0/xpan/multimedia",
+    ]);
+  }
+  console.log("  PDF transfer preserves the original file ID and returns a direct link: OK");
+}
+
 async function testApiStillExposed() {
   const harness = createHarness();
   assert.equal(typeof harness.fakeWindow.__FLUXDOWN_BAIDU_PAGE__, "object");
@@ -199,6 +274,9 @@ async function testPanelTimeoutSplit() {
 
 await testList();
 await testDownloadChineseError();
+await testTransferRejected();
+await testManuallySavedFile();
+await testPdfTransferPreservesFileIdType();
 await testInvalidRequestsIgnored();
 await testApiStillExposed();
 await testHostGuard();

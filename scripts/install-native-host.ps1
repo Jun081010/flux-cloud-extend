@@ -382,11 +382,17 @@ if ($Restore.IsPresent) {
 
 # --- Uninstall --------------------------------------------------------
 if ($Uninstall.IsPresent) {
+    $manifestInUse = $false
+    foreach ($name in @('Chrome', 'Edge')) {
+        if ($targetBrowsers -contains $name) { continue }
+        $registration = Get-RegistryDefault -Hive $hive -SubKeyPath $browserKeys[$name]
+        if ($registration.Value -eq $projectManifest) { $manifestInUse = $true }
+    }
     foreach ($name in $targetBrowsers) {
         $subKeyPath = $browserKeys[$name]
         Write-Host "  - HKCU\$subKeyPath -> <removed>"
     }
-    Write-Host "  - $projectManifest -> <removed>"
+    Write-Host "  - $projectManifest -> $(if ($manifestInUse) { '<kept for another browser>' } else { '<removed>' })"
     if (-not $PSCmdlet.ShouldProcess("HKCU NativeMessagingHosts\$HostName", 'uninstall registration')) {
         Write-Info 'WhatIf / declined: nothing removed.'
         return
@@ -394,7 +400,7 @@ if ($Uninstall.IsPresent) {
     foreach ($name in $targetBrowsers) {
         Remove-RegistryKeyTree -Hive $hive -SubKeyPath $browserKeys[$name]
     }
-    if (Test-Path -LiteralPath $projectManifest -PathType Leaf) {
+    if (-not $manifestInUse -and (Test-Path -LiteralPath $projectManifest -PathType Leaf)) {
         Remove-Item -LiteralPath $projectManifest -Force
     }
     Write-Info 'uninstall finished. The official com.fluxdown.nmh registration is untouched.'
@@ -425,12 +431,32 @@ if (Test-ReparsePoint -Path $resolvedRelay) {
 $_ = Assert-UnderDirectory -ChildPath $projectManifest -ParentPath $dataRoot -Label 'project manifest target'
 
 $customOrigin = "chrome-extension://$ExtensionId/"
+$allowedOrigins = @()
+if (Test-Path -LiteralPath $projectManifest -PathType Leaf) {
+    try {
+        $existingManifest = [System.IO.File]::ReadAllText($projectManifest, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+        if ($existingManifest.name -cne $HostName -or $existingManifest.type -cne 'stdio' -or
+            $existingManifest.allowed_origins -isnot [array]) {
+            throw 'unexpected native host manifest format'
+        }
+        foreach ($origin in $existingManifest.allowed_origins) {
+            if ($origin -isnot [string] -or $origin -cnotmatch '\Achrome-extension://[a-p]{32}/\z') {
+                throw 'invalid origin in the existing project manifest'
+            }
+            if ($allowedOrigins -cnotcontains $origin) { $allowedOrigins += $origin }
+        }
+    }
+    catch {
+        Fail "cannot preserve the existing bridge registration: $projectManifest ; $($_.Exception.Message)"
+    }
+}
+if ($allowedOrigins -cnotcontains $customOrigin) { $allowedOrigins += $customOrigin }
 $projectManifestObject = [ordered]@{
     name            = $HostName
     description     = 'FluxDown Native Messaging Host (FluxDown Cloud extension)'
     path            = $resolvedRelay
     type            = 'stdio'
-    allowed_origins = @($customOrigin)
+    allowed_origins = $allowedOrigins
 }
 $projectManifestJson = $projectManifestObject | ConvertTo-Json -Depth 5
 
@@ -465,7 +491,7 @@ foreach ($name in $targetBrowsers) {
     $before = Get-RegistryDefault -Hive $hive -SubKeyPath $subKeyPath
     Write-Host "  - HKCU\$subKeyPath : $(if ($before.Exists -and $null -ne $before.Value) { $before.Value } else { '<none>' }) -> $projectManifest"
 }
-Write-Host "  - allowed_origins: $customOrigin"
+Write-Host "  - allowed_origins: $($allowedOrigins -join ', ')"
 Write-Host "  - official com.fluxdown.nmh keys: NOT touched (desktop-app owned)"
 
 if (-not $PSCmdlet.ShouldProcess("HKCU NativeMessagingHosts\$HostName", 'install')) {
@@ -481,7 +507,8 @@ try {
     # the browser then reports a forbidden host and nothing else.
     $written = [System.IO.File]::ReadAllText($projectManifest, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
     $writtenOrigins = @($written.allowed_origins | Where-Object { $_ })
-    if ($writtenOrigins -cnotcontains $customOrigin) {
+    if ($writtenOrigins.Count -ne $allowedOrigins.Count -or
+        (Compare-Object -ReferenceObject $allowedOrigins -DifferenceObject $writtenOrigins -CaseSensitive)) {
         throw ("manifest read-back mismatch: allowed_origins = [{0}]" -f ($writtenOrigins -join ', '))
     }
 }

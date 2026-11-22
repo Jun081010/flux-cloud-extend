@@ -200,9 +200,12 @@
     if (!raw || typeof raw !== "object") return null;
     const name = asText(raw.server_filename) || asText(raw.filename) || asText(raw.name);
     const id = raw.fs_id ?? raw.fsId ?? raw.fileId ?? raw.id;
-    if (!name || id === undefined || id === null || id === "") return null;
+    const validId = typeof id === "number" ? Number.isSafeInteger(id) && id >= 0
+      : typeof id === "string" && /^\d{1,20}$/.test(id);
+    if (!name || !validId) return null;
     return {
       id: String(id),
+      transferId: id,
       name,
       size: asNumber(raw.size),
       isDir: asNumber(raw.isdir) === 1 || raw.isDir === true || raw.isdir === true,
@@ -433,13 +436,20 @@
       try {
         transfer = await apiPost(
           transferUrl,
-          new URLSearchParams({ fsidlist: JSON.stringify([item.id]), path: FOLDER }),
+          new URLSearchParams({ fsidlist: JSON.stringify([item.transferId]), path: FOLDER }),
         );
       } catch (error) {
         return fail("保存分享文件到 /FluxDown 失败：" + String(error?.message || error));
       }
       if (transfer?.errno !== 0) {
-        return fail("保存分享文件到 /FluxDown 失败：" + (transfer?.errmsg || transfer?.errno || "未知错误"));
+        const code = transfer?.errno;
+        const hasCode = (typeof code === "number" && Number.isSafeInteger(code)) ||
+          (typeof code === "string" && /^-?[0-9]{1,10}$/.test(code));
+        const reason = hasCode ? "（百度错误码 " + code + "）" : "（未收到有效的百度响应）";
+        return fail(
+          "保存分享文件到 /FluxDown 失败" + reason +
+          "。请用百度页面的「保存到网盘」将原文件保存到 /FluxDown，完成后在这里点「重试」。也可尝试百度页面自带的下载入口。",
+        );
       }
       try {
         saved = await pollForFiles(folderFiles, item, token);

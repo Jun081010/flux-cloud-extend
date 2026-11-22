@@ -58,6 +58,10 @@ jobs:
         shell: powershell
         run: powershell.exe -NoProfile -File ..\scripts\test-package-release.ps1
 
+      - name: Native bridge compatibility test (Windows PowerShell 5.1)
+        shell: powershell
+        run: powershell.exe -NoProfile -File ..\scripts\test-native-host-compat.ps1
+
       - name: Build Edge (MV3)
         run: bun run build:edge
 

@@ -76,7 +76,7 @@ Chrome 构建在 `app/wxt.config.ts` 中带 `key` 字段，设计上用于把侧
 安装脚本不读取、追加或修改官方 `com.fluxdown.nmh` 清单与官方两个键；官方清单只在自动定位 `fluxdown_nmh.exe` 时作为线索使用。安装流程：
 
 1. 定位 `fluxdown_nmh.exe`：优先 `-RelayPath` 显式指定；其次运行中的 `fluxdown-agent.exe` 所在目录；再次 HKCU 官方键指向的官方清单 `path`；最后扫描常见目录。
-2. 把项目清单原子写到 `%LOCALAPPDATA%\FluxDownCloudExtension\nmh\com.fluxdown.cloud.nmh.json`，`allowed_origins` 只含 `chrome-extension://<ExtensionId>/`。
+2. 把项目清单写到 `%LOCALAPPDATA%\FluxDownCloudExtension\nmh\com.fluxdown.cloud.nmh.json`。每次注册追加当前扩展 ID 并去重，保留本机已登记的 Edge、Chrome 和其他安装路径的合法扩展 ID。
 3. 把改动前的 HKCU 默认值备份到 `%LOCALAPPDATA%\FluxDownCloudExtension\backups\nmhcloud-backup-<时间戳>.json`。
 4. 写入 `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.fluxdown.cloud.nmh` 与 `HKCU\Software\Microsoft\Edge\NativeMessagingHosts\com.fluxdown.cloud.nmh`，默认值指向项目清单。
 
