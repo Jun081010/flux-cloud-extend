@@ -6683,16 +6683,7 @@ const $baidu = {
 				});
 			} else if (temp.page === "share") {
 				if (files.every(item => item.isdir === 1)) throw new Error("提示：<br/>请打开文件夹后再勾选文件~");
-				const shareData = await this.getShareData();
-				const sign = await base.get(`${config.$baidu.api.getShareSign}&surl=1${shareData.share.url}$bdstoken=${shareData.baidu.token}&logid=${base.encodeBase(shareData.baidu.id)}`);
-				if (sign?.data?.sign && sign?.data?.timestamp) {
-					shareData.sign = sign.data.sign;
-					shareData.timestamp = sign.data.timestamp;
-				}
-				files = await this.getShareFilesUrl(files, shareData, token).catch(e => {
-					if (e instanceof Error) throw e;
-					throw new Error(e?.message || e || "[百度网盘] 获取分享下载地址失败");
-				});
+				files = await this.resolveShareLinks(files, token);
 			} else {
 				throw new Error("提示：<br/>页面错误~");
 			}
@@ -6723,6 +6714,34 @@ const $baidu = {
 				}
 			}];
 			base.showMainDialog(config.base.dom.method[temp.mode].title, download.generateDOM(), config.base.dom.method[temp.mode].footer);
+		},
+		async resolveShareLinks(files, token) {
+			const shareData = await this.getShareData();
+			const sign = await base.get(`${config.$baidu.api.getShareSign}&surl=1${shareData.share.url}$bdstoken=${shareData.baidu.token}&logid=${base.encodeBase(shareData.baidu.id)}`);
+			if (sign?.data?.sign && sign?.data?.timestamp) {
+				shareData.sign = sign.data.sign;
+				shareData.timestamp = sign.data.timestamp;
+			}
+			files = await this.getShareFilesUrl(files, shareData, token).catch(e => {
+				if (e instanceof Error) throw e;
+				throw new Error(e?.message || e || "[百度网盘] 获取分享下载地址失败");
+			});
+			return files;
+		},
+		async resolvePanelFile(id) {
+			const fileId = file => file.fs_id ?? file.fsId ?? file.fileId ?? file.id;
+			const selected = this.getAutoShareFiles().find(file => file && String(fileId(file)) === id && !Number(file.isdir) && file.isDir !== true);
+			if (!selected) throw new Error('未找到所选文件，请刷新分享页后重试');
+			const token = base.getValue('baidu_access_token') || await this.getToken();
+			if (!token) throw new Error('请先登录百度网盘并完成下载助手授权');
+			const [file] = await this.resolveShareLinks([{ ...selected, fs_id: fileId(selected) }], token);
+			if (!file || typeof file.dlink !== 'string' || !/^https?:\/\//i.test(file.dlink)) {
+				const detail = typeof file?.dlink === 'string' ? file.dlink.replace(/<[^>]+>/g, '') : '';
+				throw new Error(detail || '百度网盘未返回可用直链');
+			}
+			const url = new URL(file.dlink);
+			url.searchParams.set('access_token', token);
+			return { url: url.href, headers: { 'User-Agent': config.$baidu.api.ua.downloadLink } };
 		},
 		getAutoShareFiles() {
 			const toArray = (x) => {
@@ -6960,6 +6979,9 @@ const $baidu = {
 			this.addPageListener();
 		},
 	};
+	if (/^(pan|yun)\.baidu\.com$/.test(location.hostname) && /^\/(s|share)\//.test(location.pathname)) {
+		window.__FLUXDOWN_BAIDU_RESOLVE__ = id => $baidu.resolvePanelFile(id);
+	}
 	const $baiduAuthorize = {
 		async initPanLinker() {
 			base.registerMenuCommand();

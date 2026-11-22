@@ -1,6 +1,6 @@
 # 项目状态（FluxDown 云盘下载拦截扩展）
 
-最后更新：2026-11-22 · 对应版本 **0.1.50** · 仓库 https://github.com/Jun081010/flux-cloud-extend
+最后更新：2026-11-22 · 对应版本 **0.1.51** · 仓库 https://github.com/Jun081010/flux-cloud-extend
 
 这份文件是交接用的「现在到哪了」：已完成的能力、已知缺陷、架构关键点、取证方式、待办。
 设计与契约细节见 `PROJECT.md`，使用者文档见 `README.md`。
@@ -9,9 +9,9 @@
 
 | 项 | 值 |
 | --- | --- |
-| 发布版本 | v0.1.50，分享包 `FluxDown-Cloud-Extension-0.1.50.zip`（60,944,452 B）+ `.zip.sha256` |
-| 分享包 SHA256 | `73e8eace19f088717cc9a7b7b5938df42bd3523e92c99e6d6ecc4c91515c6010` |
-| 扩展版本 | `app/package.json` = manifest = 0.1.50（Edge / Chrome 两套 MV3） |
+| 发布版本 | v0.1.51，分享包 `FluxDown-Cloud-Extension-0.1.51.zip`（60,940,103 B）+ `.zip.sha256` |
+| 分享包 SHA256 | `92d7f72b8090d1ef0d45fa64502121494969d5c3be3839fec15b8a1910cf4e57` |
+| 扩展版本 | `app/package.json` = manifest = 0.1.51（Edge / Chrome 两套 MV3） |
 | 自动验证 | GitHub Actions 运行类型检查、Bun / Node 测试、百度消息桥测试、打包夹具测试与双浏览器构建。 |
 | 本地验证 | `bun run test:all` 共 846 项 Bun 测试通过、1 项跳过，另有 37 项 Node 测试通过。 |
 | 构建 | `typecheck`、`test:cloud`、`test:baidu`、`build`、`build:edge` 以及 Windows PowerShell 5.1 打包验证通过。 |
@@ -21,7 +21,7 @@
 
 | 用途 | 路径 |
 | --- | --- |
-| Codex 工作区 / 分享包归档 | `D:\fluxdown-cloud-extenstion`（0.1.41–0.1.50 分享包与状态文档） |
+| Codex 工作区 / 分享包归档 | `D:\fluxdown-cloud-extenstion`（0.1.41–0.1.51 分享包与状态文档） |
 | 源码 | `D:\fluxdown-cloud-extenstion\source`（非 git 仓库；`E:\codex\fluxdown-cloud-extension` 为迁移前旧副本，仅作备份） |
 | 临时克隆 | `E:\codex\tmp\flux-cloud-extend-push-*\repo`（`main` 镜像，仅用于提交/推送） |
 
@@ -39,6 +39,7 @@
 | 0.1.48 | 11-21 | 资源列表图片缩略图（懒加载 + 失败回退 + X 图片走 name=small） |
 | 0.1.49 | 11-21 | 资源面板推送顺序与重连修复、缩略图回归测试、分享包版本与完整性校验 |
 | 0.1.50 | 11-22 | Edge / Chrome 注册保留已有扩展 ID，修正百度分享文件转存时的 ID 类型 |
+| 0.1.51 | 11-22 | 百度悬浮窗和下载助手共用分享直链解析，新增 PDF 下载入口回归测试 |
 
 ## 三、已完成能力
 

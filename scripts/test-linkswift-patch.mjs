@@ -95,9 +95,8 @@ function testBaiduPageScript() {
   assert.equal(source.includes("__fluxdownBaiduPageRequest"), true, "baidu page postMessage bridge must exist");
   assert.equal(source.includes("__fluxdownBaiduPageResponse"), true, "baidu page postMessage response must exist");
   assert.equal(source.includes('host === "pan.baidu.com" || host === "yun.baidu.com"'), true, "baidu page script must be limited to baidu cloud hosts");
-  assert.equal(source.includes('const FOLDER = "/FluxDown";'), true, "baidu page script must save into /FluxDown");
-  assert.equal(source.includes("const deadline = Date.now() + 15000;"), true, "baidu page script must poll for transferred files");
-  assert.equal(source.includes("url.searchParams.set(\"access_token\", token)"), true, "baidu dlink must carry access_token");
+  assert.equal(source.includes("__FLUXDOWN_BAIDU_RESOLVE__"), true, "baidu page script must use the shared LinkSwift resolver");
+  assert.equal(source.includes("/share/transfer"), false, "baidu page must leave transfer fallback to LinkSwift");
   assert.equal(/BDUSS|密码|账号密码|Cookie/.test(source.replace(/document\.cookie/g, "")), false, "baidu page script must not read or return BDUSS/cookie/password values");
   assert.equal(source.includes("console.log"), false, "baidu page script must not log tokens");
 }

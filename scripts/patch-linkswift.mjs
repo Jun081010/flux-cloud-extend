@@ -264,7 +264,7 @@ const FLUXDOWN_BAIDU_TRANSFER_METHOD = [
   "\t\t},",
 ].join("\r\n");
 
-function patchLinkSwift(source) {
+export function patchLinkSwift(source) {
   let text = source;
 
   text = applyStringPatch(
@@ -393,6 +393,38 @@ function patchLinkSwift(source) {
   );
   text = applyInsertionPatch(text, "autoGenericMethods", SRC_GENERIC_AUTO_ANCHOR, GENERIC_AUTO_METHOD);
   text = applyStringPatch(text, "autoGenericTrigger", SRC_GENERIC_AUTO_TRIGGER, OUT_GENERIC_AUTO_TRIGGER);
+
+  const shareLinkBlock = text.match(/\t{4}const shareData = await this\.getShareData\(\);\r\n[\s\S]*?\t{4}files = await this\.getShareFilesUrl\(files, shareData, token\)\.catch\(e => \{[\s\S]*?\t{4}\}\);/)?.[0];
+  if (!shareLinkBlock) throw new Error("patch baiduSharedResolver: missing share-link block");
+  text = applyStringPatch(text, "baiduShareLinkCall", shareLinkBlock,
+    "\t\t\t\tfiles = await this.resolveShareLinks(files, token);");
+  const methods = [
+    "\t\tasync resolveShareLinks(files, token) {",
+    shareLinkBlock.replace(/^\t/gm, ""),
+    "\t\t\treturn files;",
+    "\t\t},",
+    "\t\tasync resolvePanelFile(id) {",
+    "\t\t\tconst fileId = file => file.fs_id ?? file.fsId ?? file.fileId ?? file.id;",
+    "\t\t\tconst selected = this.getAutoShareFiles().find(file => file && String(fileId(file)) === id && !Number(file.isdir) && file.isDir !== true);",
+    "\t\t\tif (!selected) throw new Error('未找到所选文件，请刷新分享页后重试');",
+    "\t\t\tconst token = base.getValue('baidu_access_token') || await this.getToken();",
+    "\t\t\tif (!token) throw new Error('请先登录百度网盘并完成下载助手授权');",
+    "\t\t\tconst [file] = await this.resolveShareLinks([{ ...selected, fs_id: fileId(selected) }], token);",
+    "\t\t\tif (!file || typeof file.dlink !== 'string' || !/^https?:\\/\\//i.test(file.dlink)) {",
+    "\t\t\t\tconst detail = typeof file?.dlink === 'string' ? file.dlink.replace(/<[^>]+>/g, '') : '';",
+    "\t\t\t\tthrow new Error(detail || '百度网盘未返回可用直链');",
+    "\t\t\t}",
+    "\t\t\tconst url = new URL(file.dlink);",
+    "\t\t\turl.searchParams.set('access_token', token);",
+    "\t\t\treturn { url: url.href, headers: { 'User-Agent': config.$baidu.api.ua.downloadLink } };",
+    "\t\t},",
+  ].join("\r\n");
+  text = applyInsertionPatch(text, "baiduSharedResolver", "\t\tgetAutoShareFiles() {", methods);
+  text = applyInsertionPatch(text, "baiduPanelResolver", "\tconst $baiduAuthorize = {", [
+    "\tif (/^(pan|yun)\\.baidu\\.com$/.test(location.hostname) && /^\\/(s|share)\\//.test(location.pathname)) {",
+    "\t\twindow.__FLUXDOWN_BAIDU_RESOLVE__ = id => $baidu.resolvePanelFile(id);",
+    "\t}",
+  ].join("\r\n"));
 
   assertAnchors(text, [
     ["fluxdown config", "fluxdown: {", 1],
