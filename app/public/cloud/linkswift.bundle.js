@@ -1070,7 +1070,8 @@
 					},
 					onerror: (error) => {
 						let msg = "请求失败";
-						if (error && typeof error === "object") msg += ": " + JSON.stringify(error, null, 2);
+						const detail = typeof error?.message === "string" ? error.message : typeof error === "string" ? error : "";
+						if (detail) msg += ": " + detail.replace(/https?:\/\/[^\s]+/gi, "[URL]").slice(0, 180);
 						base.console.error("【LinkSwift】Post(error)\n请求出现错误，可能是网络问题。", error);
 						reject(new Error(msg));
 					}
@@ -1127,7 +1128,8 @@
 					},
 					onerror: (error) => {
 						let msg = "请求失败";
-						if (error && typeof error === "object") msg += ": " + JSON.stringify(error, null, 2);
+						const detail = typeof error?.message === "string" ? error.message : typeof error === "string" ? error : "";
+						if (detail) msg += ": " + detail.replace(/https?:\/\/[^\s]+/gi, "[URL]").slice(0, 180);
 						base.console.error("【LinkSwift】Get(error)\n请求出现错误，可能是网络问题。", error);
 						reject(new Error(msg));
 					}
@@ -6717,22 +6719,28 @@ const $baidu = {
 		},
 		async resolveShareLinks(files, token) {
 			const shareData = await this.getShareData();
-			const sign = await base.get(`${config.$baidu.api.getShareSign}&surl=1${shareData.share.url}$bdstoken=${shareData.baidu.token}&logid=${base.encodeBase(shareData.baidu.id)}`);
+			const signUrl = new URL(config.$baidu.api.getShareSign);
+			signUrl.searchParams.set('surl', '1' + shareData.share.url);
+			if (shareData.baidu.token) signUrl.searchParams.set('bdstoken', shareData.baidu.token);
+			if (shareData.baidu.id) signUrl.searchParams.set('logid', base.encodeBase(shareData.baidu.id));
+			const sign = await base.get(signUrl.href).catch(error => {
+				throw new Error('获取百度分享签名失败：' + (error?.message || '请求未完成'));
+			});
 			if (sign?.data?.sign && sign?.data?.timestamp) {
 				shareData.sign = sign.data.sign;
 				shareData.timestamp = sign.data.timestamp;
 			}
-			files = await this.getShareFilesUrl(files, shareData, token).catch(e => {
-				if (e instanceof Error) throw e;
-				throw new Error(e?.message || e || "[百度网盘] 获取分享下载地址失败");
+			return this.getShareFilesUrl(files, shareData, token).catch(error => {
+				throw new Error('获取百度分享直链失败：' + (error?.message || '请求未完成'));
 			});
-			return files;
 		},
 		async resolvePanelFile(id) {
 			const fileId = file => file.fs_id ?? file.fsId ?? file.fileId ?? file.id;
 			const selected = this.getAutoShareFiles().find(file => file && String(fileId(file)) === id && !Number(file.isdir) && file.isDir !== true);
 			if (!selected) throw new Error('未找到所选文件，请刷新分享页后重试');
-			const token = base.getValue('baidu_access_token') || await this.getToken();
+			const token = base.getValue('baidu_access_token') || await this.getToken().catch(error => {
+				throw new Error('获取百度授权状态失败：' + (error?.message || '请求未完成'));
+			});
 			if (!token) throw new Error('请先登录百度网盘并完成下载助手授权');
 			const [file] = await this.resolveShareLinks([{ ...selected, fs_id: fileId(selected) }], token);
 			if (!file || typeof file.dlink !== 'string' || !/^https?:\/\//i.test(file.dlink)) {

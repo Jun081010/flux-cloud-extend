@@ -22,7 +22,7 @@ function runNodeCheck(file) {
   execFileSync(process.execPath, ["--check", file], { stdio: "pipe" });
 }
 
-async function respond(listeners, fakeWindow, id, result) {
+async function respond(listeners, fakeWindow, id, result, ok = true) {
   listeners.forEach((listener) =>
     listener({
       source: fakeWindow,
@@ -31,8 +31,8 @@ async function respond(listeners, fakeWindow, id, result) {
         __fluxdownResult: 1,
         channel: "a".repeat(32),
         id,
-        ok: true,
-        result,
+        ok,
+        ...(ok ? { result } : { error: result }),
       },
     }),
   );
@@ -241,8 +241,37 @@ async function testShimRuntime() {
   });
   assert.equal(aborted, true, "abort must trigger onabort");
   assert.equal(downloadResult, "success");
+
+  let timeoutError;
+  fakeWindow.GM_xmlhttpRequest({
+    url: "https://pan.baidu.com/api/timeout-fixture",
+    onerror(error) { timeoutError = error; },
+  });
+  const timeoutMessage = posted.find(
+    entry => entry.message?.args?.request?.url === "https://pan.baidu.com/api/timeout-fixture",
+  );
+  assert.ok(timeoutMessage);
+  await respond(listeners, fakeWindow, timeoutMessage.message.id, "FluxDown fetch timed out", false);
+  assert.equal(timeoutError?.message, "FluxDown fetch timed out");
 }
 
+async function testRequestErrorFormatting() {
+  const source = readFileSync(outputFile, "utf8");
+  const postStart = source.indexOf("\t\tasync post(url, data");
+  const getStart = source.indexOf("\t\tasync get(url, headers", postStart);
+  const getEnd = source.indexOf("\r\n\t\t/**", getStart);
+  assert.ok(postStart >= 0 && getStart > postStart && getEnd > getStart);
+  const base = {
+    isType: value => typeof value,
+    standHeaders: () => ({}),
+    console: { error() {} },
+    xmlHttpRequest: options => options.onerror(new Error("redirect not allowed: https://pan.baidu.com/path?access_token=fixture-secret")),
+  };
+  vm.runInNewContext("Object.assign(base, {" + source.slice(postStart, getEnd) + "});", { base });
+  for (const request of [base.get("https://pan.baidu.com/fixture"), base.post("https://pan.baidu.com/fixture", "fixture")]) {
+    await assert.rejects(request, { message: "请求失败: redirect not allowed: [URL]" });
+  }
+}
 
 function testBundleIsolation() {
   const { window, document } = parseHTML("<!doctype html><html><head></head><body></body></html>");
@@ -342,5 +371,6 @@ runNodeCheck(bundleFile);
 runNodeCheck(baiduPageFile);
 testBaiduPageScript();
 testBundleIsolation();
+await testRequestErrorFormatting();
 await testShimRuntime();
 console.log(`LinkSwift patch tests passed: sha256=${summary.sha256}, bytes=${summary.bytes}`);

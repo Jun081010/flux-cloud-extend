@@ -140,6 +140,8 @@ FluxDown 桌面端（任务队列 / 下载 / 调用 FFmpeg 合并音视频）
 
 ## 八、开发与发布
 
+改动验证通过后，同步更新本机已加载的扩展目录，并把对应源码推送到 GitHub。小修可以在最新 Release 追加补丁包和校验文件，并在发布说明中注明对应提交。需要提升扩展版本号时再创建新 Release。
+
 ```powershell
 cd <仓库根目录>\app
 bun install --frozen-lockfile

@@ -17,7 +17,7 @@ execFileSync(process.execPath, ["--check", pageFile], { stdio: "pipe" });
 
 const ORIGIN = "https://pan.baidu.com";
 
-function createHarness({ resolverError, unavailable = false, linkError, directory = false } = {}) {
+function createHarness({ resolverError, signError, unavailable = false, linkError, directory = false } = {}) {
   const listeners = [];
   const posted = [];
   const calls = [];
@@ -57,7 +57,14 @@ function createHarness({ resolverError, unavailable = false, linkError, director
     setTimeout,
     base: {
       getValue: () => "fixture-token",
-      get: async () => ({ data: { sign: "fixture-sign", timestamp: 1 } }),
+      get: async request => {
+        const url = new URL(request);
+        if (signError) throw new Error(signError);
+        assert.equal(url.searchParams.get("surl"), "1fixture");
+        assert.equal(url.searchParams.get("bdstoken"), "fixture");
+        assert.equal(url.searchParams.get("logid"), "fixture-log-id");
+        return { data: { sign: "fixture-sign", timestamp: 1 } };
+      },
       encodeBase: () => "fixture-log-id",
       isType: value => Array.isArray(value) ? "array" : typeof value,
       clone: value => structuredClone(value),
@@ -136,6 +143,8 @@ async function testDownloadChineseError() {
   assert.equal(result.ok, false);
   assert.equal(typeof result.error, "string");
   assert.match(result.error, /[\u4e00-\u9fa5]/, "download failure must be a Chinese error");
+  const signFailure = createHarness({ signError: "请求失败: fixture" });
+  assert.match((await signFailure.fakeWindow.__FLUXDOWN_BAIDU_PAGE__.download("225769319988647")).error, /获取百度分享签名失败.*fixture/);
   console.log("  download error: OK ->", result.error);
 }
 

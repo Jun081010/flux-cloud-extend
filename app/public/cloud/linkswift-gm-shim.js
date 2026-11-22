@@ -256,7 +256,7 @@
       })
       .catch((error) => {
         const isTimeout = /timed out/i.test(error?.message || "");
-        finish(isTimeout ? options.ontimeout : options.onerror, error, "error");
+        finish(isTimeout && typeof options.ontimeout === "function" ? options.ontimeout : options.onerror, error, "error");
       });
 
     return handle;
